@@ -41,8 +41,8 @@ def register():
 
     # 3. Create Profile based on Role with proper validation
     if role == "farmer":
-        # Farmer requires farm_name, location, and phone_number
-        farmer_required_fields = ["farm_name", "location", "phone_number"]
+        # Farmer requires full_name, location, and phone_number
+        farmer_required_fields = ["full_name", "location", "phone_number"]
         missing_fields = [f for f in farmer_required_fields if not data.get(f)]
 
         if missing_fields:
@@ -51,9 +51,14 @@ def register():
                 "error": f"Missing required farmer fields: {', '.join(missing_fields)}"
             }), 400
 
+        # Check phone number uniqueness
+        if Farmer.query.filter_by(phone_number=data["phone_number"]).first():
+            db.session.rollback()
+            return jsonify({"error": "Phone number already registered"}), 409
+
         new_profile = Farmer(
             user_id=new_user.id,
-            farm_name=data["farm_name"],
+            farm_name=data["full_name"],
             location=data["location"],
             phone_number=data["phone_number"],
         )
