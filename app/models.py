@@ -59,7 +59,7 @@ class Farmer(db.Model, TimestampMixin):
 
     farm_name = db.Column(db.String(100), nullable=False)
     location = db.Column(db.String(255), nullable=False)
-    phone_number = db.Column(db.String(20), nullable=False)
+    phone_number = db.Column(db.String(20), unique=True, nullable=False)
     is_verified = db.Column(db.Boolean, default=False)
 
     # Livestock relationship (Farmers own the animals)
