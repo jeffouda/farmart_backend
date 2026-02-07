@@ -1,4 +1,4 @@
-from flask import Flask
+from flask import Flask, jsonify
 from flask_cors import CORS
 from .models import db
 from flask_migrate import Migrate
@@ -24,7 +24,16 @@ def create_app(config_name="default"):
 
     # Register blueprints
     from app.auth import auth_bp
+    from app.orders import orders_bp
+    from app.wishlist import wishlist_bp
 
     app.register_blueprint(auth_bp)
+    app.register_blueprint(orders_bp)
+    app.register_blueprint(wishlist_bp)
+
+    # Health check endpoint
+    @app.route("/api/health", methods=["GET"])
+    def health_check():
+        return jsonify({"status": "online", "message": "System is healthy"}), 200
 
     return app
