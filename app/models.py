@@ -33,6 +33,11 @@ class User(db.Model, TimestampMixin):
     role = db.Column(db.Enum(UserRole), nullable=False, default=UserRole.BUYER)
     is_active = db.Column(db.Boolean, default=True)
 
+    # Profile fields
+    full_name = db.Column(db.String(100), nullable=True)
+    phone_number = db.Column(db.String(20), nullable=True)
+    location = db.Column(db.String(255), nullable=True)
+
     # Polymorphic relationships to Farmer and Buyer
     farmer = db.relationship(
         "Farmer", backref="user", uselist=False, cascade="all, delete-orphan"
@@ -54,7 +59,7 @@ class User(db.Model, TimestampMixin):
 class Farmer(db.Model, TimestampMixin):
     __tablename__ = "farmers"
 
-    id = db.Column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
+    id = db.Column(db.Integer, primary_key=True, autoincrement=True)
     user_id = db.Column(UUID(as_uuid=True), db.ForeignKey("users.id"), nullable=False)
 
     farm_name = db.Column(db.String(100), nullable=False)
@@ -72,7 +77,7 @@ class Farmer(db.Model, TimestampMixin):
 class Buyer(db.Model, TimestampMixin):
     __tablename__ = "buyers"
 
-    id = db.Column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
+    id = db.Column(db.Integer, primary_key=True, autoincrement=True)
     user_id = db.Column(UUID(as_uuid=True), db.ForeignKey("users.id"), nullable=False)
 
     delivery_address = db.Column(db.Text, nullable=True)
@@ -85,10 +90,8 @@ class Buyer(db.Model, TimestampMixin):
 class Animal(db.Model, TimestampMixin):
     __tablename__ = "animals"
 
-    id = db.Column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
-    farmer_id = db.Column(
-        UUID(as_uuid=True), db.ForeignKey("farmers.id"), nullable=False
-    )
+    id = db.Column(db.Integer, primary_key=True, autoincrement=True)
+    farmer_id = db.Column(db.Integer, db.ForeignKey("farmers.id"), nullable=False)
 
     species = db.Column(db.String(50), nullable=False)  # e.g., Cow, Goat
     breed = db.Column(db.String(100))
@@ -99,5 +102,67 @@ class Animal(db.Model, TimestampMixin):
 
     image_url = db.Column(db.String(255))
 
+    def to_dict(self):
+        return {
+            "id": str(self.id),
+            "species": self.species,
+            "breed": self.breed,
+            "age": self.age,
+            "weight": self.weight,
+            "price": float(self.price),
+            "status": self.status,
+            "image_url": self.image_url,
+        }
+
     def __repr__(self):
         return f"<Animal {self.species} | {self.breed} | {self.status}>"
+
+
+class Order(db.Model, TimestampMixin):
+    __tablename__ = "orders"
+
+    id = db.Column(db.Integer, primary_key=True, autoincrement=True)
+    buyer_id = db.Column(db.Integer, db.ForeignKey("buyers.id"), nullable=False)
+
+    items = db.Column(db.JSON, nullable=False)  # List of {animal_id, name, price}
+    total_amount = db.Column(db.Numeric(10, 2), nullable=False)
+    status = db.Column(db.String(20), default="pending")  # pending, paid, completed
+    payment_method = db.Column(db.String(50), default="mpesa")  # mpesa, cod
+
+    def to_dict(self):
+        return {
+            "id": str(self.id),
+            "buyer_id": str(self.buyer_id),
+            "items": self.items,
+            "total_amount": float(self.total_amount),
+            "status": self.status,
+            "payment_method": self.payment_method,
+            "created_at": self.created_at.isoformat() if self.created_at else None,
+        }
+
+    def __repr__(self):
+        return f"<Order {self.id} | Buyer: {self.buyer_id} | ${self.total_amount}>"
+
+
+class Wishlist(db.Model, TimestampMixin):
+    __tablename__ = "wishlists"
+
+    id = db.Column(db.Integer, primary_key=True, autoincrement=True)
+    user_id = db.Column(UUID(as_uuid=True), db.ForeignKey("users.id"), nullable=False)
+    animal_id = db.Column(db.Integer, db.ForeignKey("animals.id"), nullable=False)
+
+    # Relationship to Animal for eager loading
+    animal = db.relationship("Animal", backref="wishlisted_by", lazy=True)
+
+    def to_dict(self):
+        return {
+            "id": str(self.id),
+            "user_id": str(self.user_id),
+            "animal_id": str(self.animal_id),
+            # Include nested animal object
+            "animal": self.animal.to_dict() if self.animal else None,
+            "created_at": self.created_at.isoformat() if self.created_at else None,
+        }
+
+    def __repr__(self):
+        return f"<Wishlist User: {self.user_id} | Animal: {self.animal_id}>"
