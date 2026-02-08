@@ -112,8 +112,11 @@ class Animal(db.Model, TimestampMixin):
             "price": float(self.price),
             "status": self.status,
             "image_url": self.image_url,
+<<<<<<< HEAD
+=======
             "farmer_name": self.owner.farm_name if self.owner else None,
             "location": self.owner.location if self.owner else None,
+>>>>>>> origin
         }
 
     def __repr__(self):
@@ -124,10 +127,14 @@ class Order(db.Model, TimestampMixin):
     __tablename__ = "orders"
 
     id = db.Column(db.Integer, primary_key=True, autoincrement=True)
+<<<<<<< HEAD
+    buyer_id = db.Column(UUID(as_uuid=True), db.ForeignKey("buyers.id"), nullable=False)
+=======
     buyer_id = db.Column(db.Integer, db.ForeignKey("buyers.id"), nullable=False)
     bargain_id = db.Column(
         db.Integer, db.ForeignKey("bargain_sessions.id"), nullable=True
     )  # Link to bargain session
+>>>>>>> origin
 
     items = db.Column(db.JSON, nullable=False)  # List of {animal_id, name, price}
     total_amount = db.Column(db.Numeric(10, 2), nullable=False)
@@ -138,7 +145,10 @@ class Order(db.Model, TimestampMixin):
         return {
             "id": str(self.id),
             "buyer_id": str(self.buyer_id),
+<<<<<<< HEAD
+=======
             "bargain_id": str(self.bargain_id) if self.bargain_id else None,
+>>>>>>> origin
             "items": self.items,
             "total_amount": float(self.total_amount),
             "status": self.status,
@@ -165,12 +175,18 @@ class Wishlist(db.Model, TimestampMixin):
             "id": str(self.id),
             "user_id": str(self.user_id),
             "animal_id": str(self.animal_id),
+<<<<<<< HEAD
+            # Include nested animal object
+=======
+>>>>>>> origin
             "animal": self.animal.to_dict() if self.animal else None,
             "created_at": self.created_at.isoformat() if self.created_at else None,
         }
 
     def __repr__(self):
         return f"<Wishlist User: {self.user_id} | Animal: {self.animal_id}>"
+<<<<<<< HEAD
+=======
 
 
 class BargainSession(db.Model, TimestampMixin):
@@ -281,3 +297,4 @@ class BargainMessage(db.Model):
 
     def __repr__(self):
         return f"<BargainMessage {self.id} | Session: {self.session_id}>"
+>>>>>>> origin

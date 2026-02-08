@@ -26,14 +26,20 @@ def create_app(config_name="default"):
     from app.auth import auth_bp
     from app.orders import orders_bp
     from app.wishlist import wishlist_bp
+<<<<<<< HEAD
+=======
     from app.bargain import bargain_bp
     from app.livestock import livestock_bp
+>>>>>>> origin
 
     app.register_blueprint(auth_bp)
     app.register_blueprint(orders_bp)
     app.register_blueprint(wishlist_bp)
+<<<<<<< HEAD
+=======
     app.register_blueprint(bargain_bp)
     app.register_blueprint(livestock_bp)
+>>>>>>> origin
 
     # Health check endpoint
     @app.route("/api/health", methods=["GET"])
