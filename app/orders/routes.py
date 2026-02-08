@@ -1,11 +1,8 @@
 from flask import jsonify, request
 from flask_jwt_extended import jwt_required, get_jwt_identity
-import uuid
-<<<<<<< HEAD
-from app.models import Order, Buyer, User
-=======
+
 from app.models import Order, Buyer, User, BargainSession, Animal
->>>>>>> origin
+
 from app import db
 from . import orders_bp
 
@@ -111,8 +108,7 @@ def get_order(order_id):
     return jsonify(order.to_dict()), 200
 
 
-<<<<<<< HEAD
-=======
+
 @orders_bp.route("/<order_id>", methods=["PUT"])
 @jwt_required()
 def update_order(order_id):
@@ -157,7 +153,7 @@ def update_order(order_id):
     }), 200
 
 
->>>>>>> origin
+
 @orders_bp.route("/stats", methods=["GET"])
 @jwt_required()
 def get_order_stats():
@@ -188,8 +184,7 @@ def get_order_stats():
         "total_orders": total_orders,
         "total_spent": round(total_spent, 2),
     }), 200
-<<<<<<< HEAD
-=======
+
 
 
 @orders_bp.route("/create_from_bargain", methods=["POST"])
@@ -276,4 +271,4 @@ def create_order_from_bargain():
         "order_id": order.id,
         "order": order.to_dict(),
     }), 201
->>>>>>> origin
+
