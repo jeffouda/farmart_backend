@@ -113,3 +113,130 @@ def get_all_livestock():
         "animals": [a.to_dict() for a in animals],
         "count": len(animals),
     }), 200
+
+
+@livestock_bp.route("/<int:animal_id>", methods=["GET"])
+def get_animal(animal_id):
+    """
+    Get a single animal by ID.
+    Returns animal details including farmer information.
+    """
+    animal = Animal.query.get(animal_id)
+
+    if not animal:
+        return jsonify({"error": "Animal not found"}), 404
+
+    # Get farmer details
+    farmer = Farmer.query.get(animal.farmer_id)
+    farmer_data = None
+
+    if farmer:
+        user = User.query.get(farmer.user_id)
+        farmer_data = {
+            "id": farmer.id,
+            "name": user.full_name if user else "Unknown Farmer",
+            "rating": user.average_rating
+            if user and hasattr(user, "average_rating")
+            else 0,
+            "verified": farmer.is_verified or False,
+            "avatar": (user.full_name[:2] if user else "U").upper() if user else "U",
+            "phone": farmer.phone_number or None,
+        }
+
+    # Build response matching frontend expectations
+    response_data = animal.to_dict()
+    response_data.update({
+        "farmer_id": animal.farmer_id,
+        "farmer_name": farmer_data["name"] if farmer_data else "Unknown",
+        "farmer": farmer_data,
+        # Ensure image is available
+        "image": animal.image_url or animal.image or None,
+        "images": [
+            {
+                "url": animal.image_url
+                or animal.image
+                or "https://placehold.co/600x400?text=No+Image",
+                "alt": f"{animal.species} - {animal.breed}",
+            }
+        ],
+    })
+
+    return jsonify(response_data), 200
+
+
+@livestock_bp.route("/<int:animal_id>", methods=["PUT"])
+@jwt_required()
+def update_animal(animal_id):
+    """
+    Update an animal's details.
+    Only the owner farmer can update their animal.
+    """
+    user_id_str = get_jwt_identity()
+
+    try:
+        user_id_uuid = uuid.UUID(user_id_str)
+    except ValueError:
+        return jsonify({"error": "Invalid user ID format"}), 400
+
+    user = User.query.get(user_id_uuid)
+    if not user or user.role.value != "farmer":
+        return jsonify({"error": "Only farmers can update animals"}), 403
+
+    farmer = Farmer.query.filter_by(user_id=user_id_uuid).first()
+    if not farmer:
+        return jsonify({"error": "Farmer profile not found"}), 404
+
+    animal = Animal.query.filter_by(id=animal_id, farmer_id=farmer.id).first()
+    if not animal:
+        return jsonify({"error": "Animal not found or access denied"}), 404
+
+    data = request.get_json()
+
+    # Update allowed fields
+    if "price" in data:
+        animal.price = data["price"]
+    if "status" in data:
+        animal.status = data["status"]
+    if "image_url" in data:
+        animal.image_url = data["image_url"]
+
+    db.session.commit()
+
+    return jsonify({
+        "message": "Animal updated successfully",
+        "animal": animal.to_dict(),
+    }), 200
+
+
+@livestock_bp.route("/<int:animal_id>", methods=["DELETE"])
+@jwt_required()
+def delete_animal(animal_id):
+    """
+    Delete an animal listing.
+    Only the owner farmer can delete their animal.
+    """
+    user_id_str = get_jwt_identity()
+
+    try:
+        user_id_uuid = uuid.UUID(user_id_str)
+    except ValueError:
+        return jsonify({"error": "Invalid user ID format"}), 400
+
+    user = User.query.get(user_id_uuid)
+    if not user or user.role.value != "farmer":
+        return jsonify({"error": "Only farmers can delete animals"}), 403
+
+    farmer = Farmer.query.filter_by(user_id=user_id_uuid).first()
+    if not farmer:
+        return jsonify({"error": "Farmer profile not found"}), 404
+
+    animal = Animal.query.filter_by(id=animal_id, farmer_id=farmer.id).first()
+    if not animal:
+        return jsonify({"error": "Animal not found or access denied"}), 404
+
+    db.session.delete(animal)
+    db.session.commit()
+
+    return jsonify({
+        "message": "Animal deleted successfully",
+    }), 200
