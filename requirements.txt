@@ -1,0 +1,37 @@
+# FarmArt Backend Dependencies
+# Install with: pip install -r requirements.txt
+
+# Core Framework
+Flask>=2.3.0
+Flask-SQLAlchemy>=3.0.0
+Flask-Migrate>=4.0.0
+Flask-JWT-Extended>=4.5.0
+Flask-CORS>=4.0.0
+
+# Database
+psycopg2-binary>=2.9.0
+SQLAlchemy>=2.0.0
+
+# Configuration
+python-dotenv>=1.0.0
+
+# Authentication
+Werkzeug>=2.3.0
+email-validator>=2.0.0
+
+# Validation
+marshmallow>=3.0.0
+
+# Utilities
+python-dateutil>=2.8.0
+six>=1.16.0
+
+# Testing (optional)
+pytest>=7.0.0
+pytest-flask>=1.2.0
+pytest-cov>=4.0.0
+
+# Development (optional)
+flake8>=6.0.0
+black>=23.0.0
+ipython>=8.0.0
