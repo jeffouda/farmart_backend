@@ -112,6 +112,8 @@ class Animal(db.Model, TimestampMixin):
             "price": float(self.price),
             "status": self.status,
             "image_url": self.image_url,
+            "farmer_name": self.owner.farm_name if self.owner else None,
+            "location": self.owner.location if self.owner else None,
         }
 
     def __repr__(self):
@@ -123,6 +125,9 @@ class Order(db.Model, TimestampMixin):
 
     id = db.Column(db.Integer, primary_key=True, autoincrement=True)
     buyer_id = db.Column(db.Integer, db.ForeignKey("buyers.id"), nullable=False)
+    bargain_id = db.Column(
+        db.Integer, db.ForeignKey("bargain_sessions.id"), nullable=True
+    )  # Link to bargain session
 
     items = db.Column(db.JSON, nullable=False)  # List of {animal_id, name, price}
     total_amount = db.Column(db.Numeric(10, 2), nullable=False)
@@ -133,6 +138,7 @@ class Order(db.Model, TimestampMixin):
         return {
             "id": str(self.id),
             "buyer_id": str(self.buyer_id),
+            "bargain_id": str(self.bargain_id) if self.bargain_id else None,
             "items": self.items,
             "total_amount": float(self.total_amount),
             "status": self.status,
@@ -159,10 +165,119 @@ class Wishlist(db.Model, TimestampMixin):
             "id": str(self.id),
             "user_id": str(self.user_id),
             "animal_id": str(self.animal_id),
-            # Include nested animal object
             "animal": self.animal.to_dict() if self.animal else None,
             "created_at": self.created_at.isoformat() if self.created_at else None,
         }
 
     def __repr__(self):
         return f"<Wishlist User: {self.user_id} | Animal: {self.animal_id}>"
+
+
+class BargainSession(db.Model, TimestampMixin):
+    __tablename__ = "bargain_sessions"
+
+    id = db.Column(db.Integer, primary_key=True, autoincrement=True)
+    animal_id = db.Column(db.Integer, db.ForeignKey("animals.id"), nullable=False)
+    buyer_id = db.Column(db.Integer, db.ForeignKey("buyers.id"), nullable=False)
+    farmer_id = db.Column(db.Integer, db.ForeignKey("farmers.id"), nullable=False)
+
+    # Negotiation fields
+    initial_offer = db.Column(db.Numeric(10, 2), nullable=False)
+    final_price = db.Column(db.Numeric(10, 2), nullable=True)
+    status = db.Column(
+        db.String(20), default="pending"
+    )  # pending, accepted, rejected, counter, completed
+
+    # Timestamps for negotiation
+    expires_at = db.Column(db.DateTime, nullable=True)
+    completed_at = db.Column(db.DateTime, nullable=True)
+
+    # Relationships
+    animal = db.relationship("Animal", backref="bargain_sessions")
+    buyer = db.relationship("Buyer", backref="bargain_sessions")
+    farmer = db.relationship("Farmer", backref="bargain_sessions")
+    messages = db.relationship("BargainMessage", backref="session", lazy="dynamic")
+
+    def to_dict(self, include_messages=True):
+        """Safe serialization of BargainSession without circular recursion."""
+        # Import Order here to avoid circular imports at module level
+        from app.models import Order
+
+        # Get animal data safely
+        animal_data = None
+        if self.animal:
+            animal_data = {
+                "id": str(self.animal.id),
+                "species": self.animal.species,
+                "breed": self.animal.breed,
+                "price": float(self.animal.price) if self.animal.price else None,
+            }
+
+        # Get buyer name safely (avoid circular recursion)
+        buyer_name = None
+        if self.buyer and self.buyer.user:
+            buyer_name = self.buyer.user.full_name
+
+        # Get messages if requested
+        messages_data = None
+        if include_messages and self.messages:
+            messages_data = [m.to_dict() for m in self.messages]
+
+        # Find linked order
+        linked_order = Order.query.filter_by(bargain_id=self.id).first()
+
+        return {
+            "id": str(self.id),
+            "animal_id": str(self.animal_id),
+            "buyer_id": str(self.buyer_id),
+            "farmer_id": str(self.farmer_id),
+            "initial_offer": float(self.initial_offer),
+            "final_price": float(self.final_price) if self.final_price else None,
+            "status": self.status,
+            "animal": animal_data,
+            "buyer": {
+                "id": self.buyer.id if self.buyer else None,
+                "full_name": buyer_name,
+            }
+            if self.buyer
+            else None,
+            "messages": messages_data,
+            "order_id": linked_order.id if linked_order else None,
+            "order_status": linked_order.status if linked_order else None,
+            "expires_at": self.expires_at.isoformat() if self.expires_at else None,
+            "completed_at": self.completed_at.isoformat()
+            if self.completed_at
+            else None,
+            "created_at": self.created_at.isoformat() if self.created_at else None,
+        }
+
+    def __repr__(self):
+        return f"<BargainSession {self.id} | Animal: {self.animal_id} | Status: {self.status}>"
+
+
+class BargainMessage(db.Model):
+    __tablename__ = "bargain_messages"
+
+    id = db.Column(db.Integer, primary_key=True, autoincrement=True)
+    session_id = db.Column(
+        db.Integer, db.ForeignKey("bargain_sessions.id"), nullable=False
+    )
+    sender_id = db.Column(UUID(as_uuid=True), db.ForeignKey("users.id"), nullable=False)
+    sender_role = db.Column(db.String(20), nullable=False)  # buyer or farmer
+    message = db.Column(db.Text, nullable=False)
+    offered_price = db.Column(db.Numeric(10, 2), nullable=True)
+    created_at = db.Column(db.DateTime, default=datetime.utcnow)
+
+    def to_dict(self):
+        return {
+            "id": str(self.id),
+            "session_id": str(self.session_id),
+            "sender_id": str(self.sender_id),
+            "sender_role": self.sender_role,
+            "content": self.message,
+            "offered_price": float(self.offered_price) if self.offered_price else None,
+            "created_at": self.created_at.isoformat() if self.created_at else None,
+        }
+
+    def __repr__(self):
+        return f"<BargainMessage {self.id} | Session: {self.session_id}>"
