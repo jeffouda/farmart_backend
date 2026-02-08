@@ -54,7 +54,11 @@ def add_to_wishlist():
 
     data = request.get_json()
 
+<<<<<<< HEAD
     # 📝 DEBUG: Log incoming request data
+=======
+    # DEBUG: Log incoming request data
+>>>>>>> origin
     print("Incoming Wishlist Data:", request.json)
     print("Current User ID:", current_user_id)
 
@@ -83,7 +87,11 @@ def add_to_wishlist():
         db.session.add(wishlist_item)
         db.session.commit()
     except Exception as e:
+<<<<<<< HEAD
         # 🔍 VERBOSE: Print full traceback to terminal
+=======
+        #VERBOSE: Print full traceback to terminal
+>>>>>>> origin
         traceback.print_exc()
         db.session.rollback()
         return jsonify({"error": "Backend Crash", "details": str(e)}), 500
