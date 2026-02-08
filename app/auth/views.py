@@ -32,7 +32,7 @@ def health_check():
 def register():
     data = request.get_json()
 
-    # 1. Basic validation for all users
+    # Basic validation for all users
     required_fields = ["email", "password", "role"]
     if not all(k in data for k in required_fields):
         return jsonify({"error": "Missing email, password, or role"}), 400
@@ -54,7 +54,7 @@ def register():
     if User.query.filter_by(email=email).first():
         return jsonify({"error": "Email already registered"}), 409
 
-    # 2. Create the Base User with profile data
+    # Create the Base User with profile data
     new_user = User(
         email=email,
         role=role,
@@ -67,7 +67,7 @@ def register():
     db.session.add(new_user)
     db.session.flush()  # Generates the user_id for the next step
 
-    # 3. Create Profile based on Role
+    #  Create Profile based on Role
     if role == "farmer":
         # Farmers require farm_name, location, and phone_number
         if not all([
