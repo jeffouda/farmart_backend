@@ -54,11 +54,7 @@ def register():
     if User.query.filter_by(email=email).first():
         return jsonify({"error": "Email already registered"}), 409
 
-<<<<<<< HEAD
-    # 2. Create the Base User with profile data
-=======
     # Create the Base User with profile data
->>>>>>> origin
     new_user = User(
         email=email,
         role=role,
@@ -71,11 +67,7 @@ def register():
     db.session.add(new_user)
     db.session.flush()  # Generates the user_id for the next step
 
-<<<<<<< HEAD
-    # 3. Create Profile based on Role
-=======
-    #  Create Profile based on Role
->>>>>>> origin
+    # Create Profile based on Role
     if role == "farmer":
         # Farmers require farm_name, location, and phone_number
         if not all([
@@ -110,7 +102,7 @@ def register():
         )
         db.session.add(new_profile)
 
-    # 4. Commit everything
+    # Commit everything
     try:
         db.session.commit()
         return jsonify({
