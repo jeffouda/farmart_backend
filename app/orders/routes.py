@@ -1,7 +1,7 @@
 from flask import jsonify, request
 from flask_jwt_extended import jwt_required, get_jwt_identity
 import uuid
-from app.models import Order, Buyer, User, BargainSession, Animal
+from app.models import Order, Buyer, User, Farmer, BargainSession, Animal
 from app import db
 from . import orders_bp
 
@@ -10,8 +10,8 @@ from . import orders_bp
 @jwt_required()
 def get_my_orders():
     """
-    Get all orders for the current authenticated user.
-    Returns only orders belonging to the current user.
+    Get all orders for the current authenticated user (as buyer).
+    Returns only orders belonging to the current user as a buyer.
     """
     current_user_id_str = get_jwt_identity()
 
@@ -29,6 +29,33 @@ def get_my_orders():
 
     # Filter orders by buyer_id - DATA ISOLATION
     orders = Order.query.filter_by(buyer_id=buyer.id).all()
+
+    return jsonify([order.to_dict() for order in orders]), 200
+
+
+@orders_bp.route("/my-sales", methods=["GET"])
+@jwt_required()
+def get_my_sales():
+    """
+    Get all orders for the current authenticated user (as farmer/seller).
+    Returns only orders where the current user is the farmer.
+    """
+    current_user_id_str = get_jwt_identity()
+
+    # Convert string UUID to UUID object for database query
+    try:
+        current_user_id = uuid.UUID(current_user_id_str)
+    except ValueError:
+        return jsonify({"error": "Invalid user ID format"}), 400
+
+    # Find the farmer record for this user
+    farmer = Farmer.query.filter_by(user_id=current_user_id).first()
+
+    if not farmer:
+        return jsonify({"message": "No farmer profile found for this user"}), 404
+
+    # Filter orders by farmer_id - DATA ISOLATION
+    orders = Order.query.filter_by(farmer_id=farmer.id).all()
 
     return jsonify([order.to_dict() for order in orders]), 200
 
@@ -59,10 +86,24 @@ def create_order():
     if not data or "items" not in data or "total_amount" not in data:
         return jsonify({"message": "Missing required fields: items, total_amount"}), 400
 
+    # Get the farmer_id from the first animal item
+    items = data["items"]
+    farmer_id = None
+    if items and len(items) > 0:
+        first_animal_id = items[0].get("animal_id")
+        if first_animal_id:
+            animal = Animal.query.get(first_animal_id)
+            if animal:
+                farmer_id = animal.farmer_id
+
+    if not farmer_id:
+        return jsonify({"message": "Could not determine farmer for the order"}), 400
+
     # Create new order
     order = Order(
         buyer_id=buyer.id,
-        items=data["items"],
+        farmer_id=farmer_id,
+        items=items,
         total_amount=data["total_amount"],
         status=data.get("status", "paid"),
         payment_method=data.get("payment_method", "mpesa"),
@@ -267,3 +308,54 @@ def create_order_from_bargain():
         "order_id": order.id,
         "order": order.to_dict(),
     }), 201
+
+
+@orders_bp.route("/<int:order_id>/confirm-receipt", methods=["POST"])
+@jwt_required()
+def confirm_receipt(order_id):
+    """
+    Confirm that the buyer has received the order.
+    Updates order status to 'delivered' and releases payment to farmer.
+    """
+    current_user_id_str = get_jwt_identity()
+
+    # Convert string UUID to UUID object
+    try:
+        current_user_id = uuid.UUID(current_user_id_str)
+    except ValueError:
+        return jsonify({"error": "Invalid user ID format"}), 400
+
+    # Find the buyer record for this user
+    buyer = Buyer.query.filter_by(user_id=current_user_id).first()
+
+    if not buyer:
+        return jsonify({"message": "No buyer profile found for this user"}), 404
+
+    # Find order and verify ownership
+    order = Order.query.filter_by(id=order_id, buyer_id=buyer.id).first()
+
+    if not order:
+        return jsonify({"message": "Order not found or access denied"}), 404
+
+    # Validate order status - allow paid, shipped, or in_transit for testing
+    if order.status not in ["paid", "shipped", "in_transit"]:
+        return jsonify({
+            "message": f"Cannot confirm receipt. Order status is '{order.status}'. Expected 'paid', 'shipped', or 'in_transit'."
+        }), 400
+
+    # Update order status
+    order.status = "delivered"
+    order.payment_status = "released"
+
+    # Add funds to farmer's wallet
+    farmer = Farmer.query.get(order.farmer_id)
+    if farmer:
+        farmer.wallet_balance = (farmer.wallet_balance or 0) + order.total_amount
+
+    db.session.commit()
+
+    return jsonify({
+        "message": "Order confirmed, funds released to farmer.",
+        "order": order.to_dict(),
+        "farmer_received": float(order.total_amount),
+    }), 200

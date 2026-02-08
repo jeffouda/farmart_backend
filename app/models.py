@@ -38,6 +38,10 @@ class User(db.Model, TimestampMixin):
     phone_number = db.Column(db.String(20), nullable=True)
     location = db.Column(db.String(255), nullable=True)
 
+    # Reputation fields (for farmers)
+    average_rating = db.Column(db.Float, default=0.0)
+    review_count = db.Column(db.Integer, default=0)
+
     # Polymorphic relationships to Farmer and Buyer
     farmer = db.relationship(
         "Farmer", backref="user", uselist=False, cascade="all, delete-orphan"
@@ -66,6 +70,9 @@ class Farmer(db.Model, TimestampMixin):
     location = db.Column(db.String(255), nullable=False)
     phone_number = db.Column(db.String(20), unique=True, nullable=False)
     is_verified = db.Column(db.Boolean, default=False)
+
+    # Wallet balance for holding funds
+    wallet_balance = db.Column(db.Numeric(10, 2), default=0)
 
     # Livestock relationship (Farmers own the animals)
     animals = db.relationship("Animal", backref="owner", lazy=True)
@@ -99,7 +106,9 @@ class Animal(db.Model, TimestampMixin):
     weight = db.Column(db.Float)  # kg
     price = db.Column(db.Numeric(10, 2), nullable=False)
     status = db.Column(db.String(20), default="available")  # available, reserved, sold
-
+    gender = db.Column(db.String(20))  # male, female
+    health_history = db.Column(db.Text)  # health information
+    
     image_url = db.Column(db.String(255))
 
     def to_dict(self):
@@ -111,8 +120,11 @@ class Animal(db.Model, TimestampMixin):
             "weight": self.weight,
             "price": float(self.price),
             "status": self.status,
+            "gender": self.gender,
+            "health_history": self.health_history,
             "image_url": self.image_url,
             "farmer_name": self.owner.farm_name if self.owner else None,
+            "farmer_id": self.owner.id if self.owner else None,
             "location": self.owner.location if self.owner else None,
         }
 
@@ -125,29 +137,75 @@ class Order(db.Model, TimestampMixin):
 
     id = db.Column(db.Integer, primary_key=True, autoincrement=True)
     buyer_id = db.Column(db.Integer, db.ForeignKey("buyers.id"), nullable=False)
+    farmer_id = db.Column(db.Integer, db.ForeignKey("farmers.id"), nullable=False)
     bargain_id = db.Column(
         db.Integer, db.ForeignKey("bargain_sessions.id"), nullable=True
     )  # Link to bargain session
 
     items = db.Column(db.JSON, nullable=False)  # List of {animal_id, name, price}
     total_amount = db.Column(db.Numeric(10, 2), nullable=False)
-    status = db.Column(db.String(20), default="pending")  # pending, paid, completed
+    status = db.Column(db.String(20), default="pending")  # pending, paid, shipped, delivered, completed
+    payment_status = db.Column(db.String(20), default="pending")  # pending, held, released
     payment_method = db.Column(db.String(50), default="mpesa")  # mpesa, cod
+
+    # Review tracking
+    has_review = db.Column(db.Boolean, default=False)
+
+    # Relationships
+    buyer = db.relationship("Buyer", backref="orders")
+    farmer = db.relationship("Farmer", backref="orders")
 
     def to_dict(self):
         return {
             "id": str(self.id),
             "buyer_id": str(self.buyer_id),
+            "farmer_id": str(self.farmer_id),
             "bargain_id": str(self.bargain_id) if self.bargain_id else None,
             "items": self.items,
             "total_amount": float(self.total_amount),
             "status": self.status,
+            "payment_status": self.payment_status,
             "payment_method": self.payment_method,
+            "has_review": self.has_review,
+            "farmer_name": self.farmer.farm_name if self.farmer else None,
             "created_at": self.created_at.isoformat() if self.created_at else None,
         }
 
     def __repr__(self):
         return f"<Order {self.id} | Buyer: {self.buyer_id} | ${self.total_amount}>"
+
+
+class Review(db.Model, TimestampMixin):
+    __tablename__ = "reviews"
+
+    id = db.Column(db.Integer, primary_key=True, autoincrement=True)
+    order_id = db.Column(db.Integer, db.ForeignKey("orders.id"), nullable=False)
+    reviewer_id = db.Column(UUID(as_uuid=True), db.ForeignKey("users.id"), nullable=False)
+    target_id = db.Column(UUID(as_uuid=True), db.ForeignKey("users.id"), nullable=False)  # Farmer's user_id
+
+    rating = db.Column(db.Integer, nullable=False)  # 1-5 stars
+    comment = db.Column(db.Text, nullable=True)
+    tags = db.Column(db.JSON, nullable=True)  # List of strings
+
+    # Relationships
+    order = db.relationship("Order", backref="review")
+    reviewer = db.relationship("User", foreign_keys=[reviewer_id], backref="reviews_given")
+    target = db.relationship("User", foreign_keys=[target_id], backref="reviews_received")
+
+    def to_dict(self):
+        return {
+            "id": str(self.id),
+            "order_id": str(self.order_id),
+            "reviewer_id": str(self.reviewer_id),
+            "target_id": str(self.target_id),
+            "rating": self.rating,
+            "comment": self.comment,
+            "tags": self.tags,
+            "created_at": self.created_at.isoformat() if self.created_at else None,
+        }
+
+    def __repr__(self):
+        return f"<Review {self.id} | Order: {self.order_id} | Rating: {self.rating}>"
 
 
 class Wishlist(db.Model, TimestampMixin):
