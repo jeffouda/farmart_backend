@@ -1,8 +1,8 @@
-"""Initial migration with Integer IDs
+"""standardize all primary and foreign keys to uuid
 
-Revision ID: bab4396ce7e6
+Revision ID: d020150f8735
 Revises: 
-Create Date: 2026-02-07 05:37:42.106716
+Create Date: 2026-02-09 08:52:01.930582
 
 """
 from alembic import op
@@ -10,7 +10,7 @@ import sqlalchemy as sa
 
 
 # revision identifiers, used by Alembic.
-revision = 'bab4396ce7e6'
+revision = 'd020150f8735'
 down_revision = None
 branch_labels = None
 depends_on = None
@@ -27,6 +27,8 @@ def upgrade():
     sa.Column('full_name', sa.String(length=100), nullable=True),
     sa.Column('phone_number', sa.String(length=20), nullable=True),
     sa.Column('location', sa.String(length=255), nullable=True),
+    sa.Column('average_rating', sa.Float(), nullable=True),
+    sa.Column('review_count', sa.Integer(), nullable=True),
     sa.Column('created_at', sa.DateTime(), nullable=False),
     sa.Column('updated_at', sa.DateTime(), nullable=True),
     sa.PrimaryKeyConstraint('id')
@@ -35,7 +37,7 @@ def upgrade():
         batch_op.create_index(batch_op.f('ix_users_email'), ['email'], unique=True)
 
     op.create_table('buyers',
-    sa.Column('id', sa.Integer(), autoincrement=True, nullable=False),
+    sa.Column('id', sa.UUID(), nullable=False),
     sa.Column('user_id', sa.UUID(), nullable=False),
     sa.Column('delivery_address', sa.Text(), nullable=True),
     sa.Column('preferred_contact', sa.String(length=50), nullable=True),
@@ -45,12 +47,13 @@ def upgrade():
     sa.PrimaryKeyConstraint('id')
     )
     op.create_table('farmers',
-    sa.Column('id', sa.Integer(), autoincrement=True, nullable=False),
+    sa.Column('id', sa.UUID(), nullable=False),
     sa.Column('user_id', sa.UUID(), nullable=False),
     sa.Column('farm_name', sa.String(length=100), nullable=False),
     sa.Column('location', sa.String(length=255), nullable=False),
     sa.Column('phone_number', sa.String(length=20), nullable=False),
     sa.Column('is_verified', sa.Boolean(), nullable=True),
+    sa.Column('wallet_balance', sa.Numeric(precision=10, scale=2), nullable=True),
     sa.Column('created_at', sa.DateTime(), nullable=False),
     sa.Column('updated_at', sa.DateTime(), nullable=True),
     sa.ForeignKeyConstraint(['user_id'], ['users.id'], ),
@@ -58,40 +61,92 @@ def upgrade():
     sa.UniqueConstraint('phone_number')
     )
     op.create_table('animals',
-    sa.Column('id', sa.Integer(), autoincrement=True, nullable=False),
-    sa.Column('farmer_id', sa.Integer(), nullable=False),
+    sa.Column('id', sa.UUID(), nullable=False),
+    sa.Column('farmer_id', sa.UUID(), nullable=False),
     sa.Column('species', sa.String(length=50), nullable=False),
     sa.Column('breed', sa.String(length=100), nullable=True),
     sa.Column('age', sa.Integer(), nullable=True),
     sa.Column('weight', sa.Float(), nullable=True),
     sa.Column('price', sa.Numeric(precision=10, scale=2), nullable=False),
     sa.Column('status', sa.String(length=20), nullable=True),
+    sa.Column('gender', sa.String(length=20), nullable=True),
+    sa.Column('health_history', sa.Text(), nullable=True),
     sa.Column('image_url', sa.String(length=255), nullable=True),
     sa.Column('created_at', sa.DateTime(), nullable=False),
     sa.Column('updated_at', sa.DateTime(), nullable=True),
     sa.ForeignKeyConstraint(['farmer_id'], ['farmers.id'], ),
     sa.PrimaryKeyConstraint('id')
     )
-    op.create_table('orders',
+    op.create_table('bargain_sessions',
     sa.Column('id', sa.Integer(), autoincrement=True, nullable=False),
-    sa.Column('buyer_id', sa.Integer(), nullable=False),
-    sa.Column('items', sa.JSON(), nullable=False),
-    sa.Column('total_amount', sa.Numeric(precision=10, scale=2), nullable=False),
+    sa.Column('animal_id', sa.UUID(), nullable=False),
+    sa.Column('buyer_id', sa.UUID(), nullable=False),
+    sa.Column('farmer_id', sa.UUID(), nullable=False),
+    sa.Column('initial_offer', sa.Numeric(precision=10, scale=2), nullable=False),
+    sa.Column('final_price', sa.Numeric(precision=10, scale=2), nullable=True),
     sa.Column('status', sa.String(length=20), nullable=True),
-    sa.Column('payment_method', sa.String(length=50), nullable=True),
+    sa.Column('expires_at', sa.DateTime(), nullable=True),
+    sa.Column('completed_at', sa.DateTime(), nullable=True),
     sa.Column('created_at', sa.DateTime(), nullable=False),
     sa.Column('updated_at', sa.DateTime(), nullable=True),
+    sa.ForeignKeyConstraint(['animal_id'], ['animals.id'], ),
     sa.ForeignKeyConstraint(['buyer_id'], ['buyers.id'], ),
+    sa.ForeignKeyConstraint(['farmer_id'], ['farmers.id'], ),
     sa.PrimaryKeyConstraint('id')
     )
     op.create_table('wishlists',
     sa.Column('id', sa.Integer(), autoincrement=True, nullable=False),
     sa.Column('user_id', sa.UUID(), nullable=False),
-    sa.Column('animal_id', sa.Integer(), nullable=False),
+    sa.Column('animal_id', sa.UUID(), nullable=False),
     sa.Column('created_at', sa.DateTime(), nullable=False),
     sa.Column('updated_at', sa.DateTime(), nullable=True),
     sa.ForeignKeyConstraint(['animal_id'], ['animals.id'], ),
     sa.ForeignKeyConstraint(['user_id'], ['users.id'], ),
+    sa.PrimaryKeyConstraint('id')
+    )
+    op.create_table('bargain_messages',
+    sa.Column('id', sa.Integer(), autoincrement=True, nullable=False),
+    sa.Column('session_id', sa.Integer(), nullable=False),
+    sa.Column('sender_id', sa.UUID(), nullable=False),
+    sa.Column('sender_role', sa.String(length=20), nullable=False),
+    sa.Column('message', sa.Text(), nullable=False),
+    sa.Column('offered_price', sa.Numeric(precision=10, scale=2), nullable=True),
+    sa.Column('created_at', sa.DateTime(), nullable=True),
+    sa.ForeignKeyConstraint(['sender_id'], ['users.id'], ),
+    sa.ForeignKeyConstraint(['session_id'], ['bargain_sessions.id'], ),
+    sa.PrimaryKeyConstraint('id')
+    )
+    op.create_table('orders',
+    sa.Column('id', sa.UUID(), nullable=False),
+    sa.Column('buyer_id', sa.UUID(), nullable=False),
+    sa.Column('farmer_id', sa.UUID(), nullable=False),
+    sa.Column('bargain_id', sa.Integer(), nullable=True),
+    sa.Column('items', sa.JSON(), nullable=False),
+    sa.Column('total_amount', sa.Numeric(precision=10, scale=2), nullable=False),
+    sa.Column('status', sa.String(length=20), nullable=True),
+    sa.Column('payment_status', sa.String(length=20), nullable=True),
+    sa.Column('payment_method', sa.String(length=50), nullable=True),
+    sa.Column('has_review', sa.Boolean(), nullable=True),
+    sa.Column('created_at', sa.DateTime(), nullable=False),
+    sa.Column('updated_at', sa.DateTime(), nullable=True),
+    sa.ForeignKeyConstraint(['bargain_id'], ['bargain_sessions.id'], ),
+    sa.ForeignKeyConstraint(['buyer_id'], ['buyers.id'], ),
+    sa.ForeignKeyConstraint(['farmer_id'], ['farmers.id'], ),
+    sa.PrimaryKeyConstraint('id')
+    )
+    op.create_table('reviews',
+    sa.Column('id', sa.UUID(), nullable=False),
+    sa.Column('order_id', sa.UUID(), nullable=False),
+    sa.Column('reviewer_id', sa.UUID(), nullable=False),
+    sa.Column('target_id', sa.UUID(), nullable=False),
+    sa.Column('rating', sa.Integer(), nullable=False),
+    sa.Column('comment', sa.Text(), nullable=True),
+    sa.Column('tags', sa.JSON(), nullable=True),
+    sa.Column('created_at', sa.DateTime(), nullable=False),
+    sa.Column('updated_at', sa.DateTime(), nullable=True),
+    sa.ForeignKeyConstraint(['order_id'], ['orders.id'], ),
+    sa.ForeignKeyConstraint(['reviewer_id'], ['users.id'], ),
+    sa.ForeignKeyConstraint(['target_id'], ['users.id'], ),
     sa.PrimaryKeyConstraint('id')
     )
     # ### end Alembic commands ###
@@ -99,8 +154,11 @@ def upgrade():
 
 def downgrade():
     # ### commands auto generated by Alembic - please adjust! ###
-    op.drop_table('wishlists')
+    op.drop_table('reviews')
     op.drop_table('orders')
+    op.drop_table('bargain_messages')
+    op.drop_table('wishlists')
+    op.drop_table('bargain_sessions')
     op.drop_table('animals')
     op.drop_table('farmers')
     op.drop_table('buyers')
