@@ -4,6 +4,9 @@ from app import db
 from app.models import User, Farmer, Animal
 from . import livestock_bp
 import uuid
+import os
+from werkzeug.utils import secure_filename
+from datetime import datetime
 
 
 @livestock_bp.route("/stats", methods=["GET"])
@@ -56,6 +59,93 @@ def get_inventory_stats():
         "pending": pending_count,
         "sold": sold_count,
     }), 200
+
+
+@livestock_bp.route("/create", methods=["POST"])
+@jwt_required()
+def create_animal():
+    """
+    Create a new animal listing with optional image upload.
+    Only accessible by farmers.
+    """
+    user_id_str = get_jwt_identity()
+
+    try:
+        user_id_uuid = uuid.UUID(user_id_str)
+    except ValueError:
+        return jsonify({"error": "Invalid user ID format"}), 400
+
+    user = User.query.get(user_id_uuid)
+    if not user:
+        return jsonify({"error": "User not found"}), 404
+
+    # Only farmers can create animals
+    if user.role.value != "farmer":
+        return jsonify({"error": "Only farmers can create livestock listings"}), 403
+
+    farmer = Farmer.query.filter_by(user_id=user_id_uuid).first()
+    if not farmer:
+        return jsonify({"error": "Farmer profile not found"}), 404
+
+    # Get form data
+    species = request.form.get("species")
+    breed = request.form.get("breed")
+    price = request.form.get("price")
+    age = request.form.get("age")
+    age_unit = request.form.get("ageUnit", "months")
+    weight = request.form.get("weight")
+    gender = request.form.get("gender", "male")
+    description = request.form.get("description")
+    health_history = request.form.get("health_history")
+
+    # Validate required fields
+    if not species or not breed or not price:
+        return jsonify({"error": "Species, breed, and price are required"}), 400
+
+    # Convert age to months if in years
+    age_months = int(age) if age else None
+    if age_unit == "years" and age:
+        age_months = int(age) * 12
+
+    # Handle image upload
+    image_url = None
+    if "image" in request.files:
+        image_file = request.files["image"]
+        if image_file and image_file.filename:
+            # Create upload directory if it doesn't exist
+            upload_dir = os.path.join(os.path.dirname(os.path.dirname(__file__)), "static", "uploads")
+            os.makedirs(upload_dir, exist_ok=True)
+
+            # Generate secure filename with timestamp
+            filename = secure_filename(f"{datetime.now().strftime('%Y%m%d_%H%M%S')}_{image_file.filename}")
+            file_path = os.path.join(upload_dir, filename)
+            image_file.save(file_path)
+
+            # Store relative URL
+            image_url = f"/static/uploads/{filename}"
+
+    # Create new animal
+    animal = Animal(
+        farmer_id=farmer.id,
+        species=species,
+        breed=breed,
+        age=age_months,
+        weight=float(weight) if weight else None,
+        price=float(price),
+        status="available",
+        gender=gender,
+        health_history=health_history,
+        image_url=image_url or "https://placehold.co/600x400?text=No+Image",
+    )
+
+    db.session.add(animal)
+    db.session.commit()
+
+    return jsonify({
+        "success": True,
+        "message": "Livestock created successfully",
+        "animal": animal.to_dict(),
+    }), 201
 
 
 @livestock_bp.route("/seed_test", methods=["POST"])
