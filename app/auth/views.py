@@ -148,6 +148,35 @@ def login():
     return jsonify({"error": "Invalid credentials"}), 401
 
 
+# DEBUG ROUTE - Remove in production!
+@auth_bp.route("/debug/login", methods=["POST"])
+def debug_login():
+    """Debug login that returns user info even if password fails (for testing only!)."""
+    data = request.get_json()
+    email = data.get("email")
+
+    user = User.query.filter_by(email=email).first()
+
+    if not user:
+        return jsonify({
+            "error": "User not found",
+            "email": email,
+            "registered_emails": [u.email for u in User.query.all()],
+        }), 404
+
+    # Check if password matches
+    password = data.get("password")
+    password_matches = user.check_password(password)
+
+    return jsonify({
+        "email": user.email,
+        "role": str(user.role),
+        "password_hash": user.password_hash[:20] + "...",
+        "password_matches": password_matches,
+        "debug": "Password check result",
+    }), 200
+
+
 # GET CURRENT USER ROUTE
 @auth_bp.route("/me", methods=["GET"])
 @jwt_required()
