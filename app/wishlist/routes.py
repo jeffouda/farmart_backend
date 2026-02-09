@@ -54,44 +54,6 @@ def add_to_wishlist():
 
     data = request.get_json()
 
-    # DEBUG: Log incoming request data
-    print("Incoming Wishlist Data:", request.json)
-    print("Current User ID:", current_user_id)
-
-    # Input Validation: Check if animal_id is in request
-    if not data or "animal_id" not in data:
-        return jsonify({"message": "Missing required field: animal_id"}), 400
-
-    animal_id = data["animal_id"]
-
-    # Duplicate Check: Query the DB before adding
-    existing = Wishlist.query.filter_by(
-        user_id=current_user_id, animal_id=animal_id
-    ).first()
-
-    if existing:
-        return jsonify({"message": "Item already in wishlist"}), 200
-
-    # Create wishlist item
-    wishlist_item = Wishlist(
-        user_id=current_user_id,
-        animal_id=animal_id,
-    )
-
-    # Exception Handling: Wrap DB commit in try-except
-    try:
-        db.session.add(wishlist_item)
-        db.session.commit()
-    except Exception as e:
-        #VERBOSE: Print full traceback to terminal
-        traceback.print_exc()
-        db.session.rollback()
-        return jsonify({"error": "Backend Crash", "details": str(e)}), 500
-
-    return jsonify({
-        "message": "Added to wishlist",
-        "item": wishlist_item.to_dict(),
-    }), 201
 
 
 @wishlist_bp.route("/<item_id>", methods=["DELETE"])
