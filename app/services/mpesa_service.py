@@ -30,3 +30,32 @@ class MpesaService:
         data_to_encode = shortcode + passkey + timestamp
         online_password = base64.b64encode(data_to_encode.encode()).decode('utf-8')
         return online_password, timestamp
+    
+
+    @classmethod
+    def stk_push(cls, phone, amount, order_id):
+        """Initiates the STK Push on the buyer's phone."""
+        token = cls.get_access_token()
+        password, timestamp = cls.generate_password()
+        
+        headers = {"Authorization": f"Bearer {token}"}
+        payload = {
+            "BusinessShortCode": current_app.config['MPESA_SHORTCODE'],
+            "Password": password,
+            "Timestamp": timestamp,
+            "TransactionType": "CustomerPayBillOnline",
+            "Amount": int(amount),
+            "PartyA": phone, # 2547xxxxxxxx
+            "PartyB": current_app.config['MPESA_SHORTCODE'],
+            "PhoneNumber": phone,
+            "CallBackURL": f"{current_app.config['BASE_URL']}/api/payments/callback/stk",
+            "AccountReference": f"Order_{order_id}",
+            "TransactionDesc": "Farmart Escrow Payment"
+        }
+        
+        res = requests.post(
+            "https://sandbox.safaricom.co.ke/mpesa/stkpush/v1/processrequest",
+            json=payload,
+            headers=headers
+        )
+        return res.json()
