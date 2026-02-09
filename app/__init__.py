@@ -1,9 +1,10 @@
-from flask import Flask, jsonify
+from flask import Flask, jsonify, send_from_directory
 from flask_cors import CORS
 from .models import db
 from flask_migrate import Migrate
 from flask_jwt_extended import JWTManager
 from config import config
+import os
 
 migrate = Migrate()
 jwt = JWTManager()
@@ -19,8 +20,17 @@ def create_app(config_name="default"):
     app_config = config.get(config_name, config["default"])
     app.config.from_object(app_config)
 
-    # Initialize extensions
-    CORS(app)
+    # Initialize extensions with CORS configuration
+    CORS(
+        app,
+        resources={
+            r"/api/*": {
+                "origins": ["http://localhost:5173", "http://127.0.0.1:5173"],
+                "methods": ["GET", "POST", "PUT", "DELETE", "OPTIONS"],
+                "allow_headers": ["Content-Type", "Authorization"],
+            }
+        },
+    )
     db.init_app(app)
     migrate.init_app(app, db)
     jwt.init_app(app)
@@ -34,6 +44,7 @@ def create_app(config_name="default"):
     from app.disputes import disputes_bp
     from app.reviews import reviews_bp
     from app.analytics import analytics_bp
+    from app.negotiation import negotiation_bp
 
     app.register_blueprint(auth_bp)
     app.register_blueprint(orders_bp)
@@ -43,6 +54,15 @@ def create_app(config_name="default"):
     app.register_blueprint(disputes_bp)
     app.register_blueprint(reviews_bp)
     app.register_blueprint(analytics_bp)
+    app.register_blueprint(negotiation_bp)
+
+    # Serve uploaded images
+    uploads_dir = os.path.join(os.getcwd(), "uploads")
+    if os.path.exists(uploads_dir):
+
+        @app.route("/uploads/<path:filename>")
+        def serve_upload(filename):
+            return send_from_directory(uploads_dir, filename)
 
     # Health check endpoint
     @app.route("/api/health", methods=["GET"])

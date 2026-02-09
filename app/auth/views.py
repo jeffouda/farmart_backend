@@ -129,7 +129,7 @@ def login():
     if user and user.check_password(password):
         # Create JWT Token
         access_token = create_access_token(
-            identity=str(user.id), additional_claims={"role": user.role}
+            identity=str(user.id), additional_claims={"role": str(user.role.value)}
         )
 
         return jsonify({
@@ -138,7 +138,7 @@ def login():
             "user": {
                 "id": str(user.id),
                 "email": user.email,
-                "role": user.role,
+                "role": str(user.role.value),  # Explicitly convert enum to string
                 "full_name": user.full_name,
                 "phone_number": user.phone_number,
                 "location": user.location,
@@ -200,7 +200,7 @@ def get_current_user():
     return jsonify({
         "id": str(user.id),
         "email": user.email,
-        "role": user.role,
+        "role": str(user.role.value),  # Explicitly convert enum to string
         "full_name": user.full_name,
         "phone_number": user.phone_number,
         "location": user.location,

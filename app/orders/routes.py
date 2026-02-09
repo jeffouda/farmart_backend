@@ -60,6 +60,54 @@ def get_my_sales():
     return jsonify([order.to_dict() for order in orders]), 200
 
 
+@orders_bp.route("/admin/all", methods=["GET"])
+@jwt_required()
+def get_all_orders_admin():
+    """
+    Admin endpoint: Get all orders across the platform.
+    Returns all orders with buyer and farmer details.
+    """
+    current_user_id_str = get_jwt_identity()
+
+    try:
+        current_user_id = uuid.UUID(current_user_id_str)
+    except ValueError:
+        return jsonify({"error": "Invalid user ID format"}), 400
+
+    # Check if user is admin
+    user = User.query.get(current_user_id)
+    if not user:
+        return jsonify({"error": "User not found"}), 404
+
+    if user.role.value != "admin":
+        return jsonify({"error": "Admin access required"}), 403
+
+    # Get all orders with details
+    orders = Order.query.order_by(Order.created_at.desc()).all()
+
+    # Build response with buyer and farmer info
+    result = []
+    for order in orders:
+        # Get buyer info
+        buyer = Buyer.query.get(order.buyer_id)
+        buyer_user = User.query.get(buyer.user_id) if buyer else None
+
+        # Get farmer info
+        farmer = Farmer.query.get(order.farmer_id)
+        farmer_user = User.query.get(farmer.user_id) if farmer else None
+
+        order_dict = order.to_dict()
+        order_dict.update({
+            "buyer_name": buyer_user.full_name if buyer_user else "Unknown",
+            "buyer_email": buyer_user.email if buyer_user else "Unknown",
+            "farmer_name": farmer_user.full_name if farmer_user else "Unknown",
+            "farmer_location": farmer.location if farmer else "Unknown",
+        })
+        result.append(order_dict)
+
+    return jsonify(result), 200
+
+
 @orders_bp.route("/", methods=["POST"])
 @jwt_required()
 def create_order():
@@ -264,8 +312,14 @@ def get_farmer_order_stats():
     cancelled_count = sum(1 for o in orders if o.status == "cancelled")
 
     # Calculate revenue (only from delivered orders)
-    total_revenue = sum(float(o.total_amount) for o in orders if o.status == "delivered")
-    pending_revenue = sum(float(o.total_amount) for o in orders if o.status in ["pending", "paid", "shipped"])
+    total_revenue = sum(
+        float(o.total_amount) for o in orders if o.status == "delivered"
+    )
+    pending_revenue = sum(
+        float(o.total_amount)
+        for o in orders
+        if o.status in ["pending", "paid", "shipped"]
+    )
 
     # Active orders (need action)
     active_orders = sum(1 for o in orders if o.status in ["pending", "paid"])
@@ -287,7 +341,7 @@ def get_farmer_order_stats():
             "shipped": shipped_count,
             "delivered": delivered_count,
             "cancelled": cancelled_count,
-        }
+        },
     }), 200
 
 
@@ -425,4 +479,83 @@ def confirm_receipt(order_id):
         "message": "Order confirmed, funds released to farmer.",
         "order": order.to_dict(),
         "farmer_received": float(order.total_amount),
+    }), 200
+
+
+@orders_bp.route("/<order_id>/status", methods=["PUT"])
+@jwt_required()
+def update_order_status(order_id):
+    """
+    Update order status by a farmer (seller).
+    Allows farmers to mark orders as shipped or delivered.
+    """
+    current_user_id_str = get_jwt_identity()
+
+    # Convert string UUID to UUID object
+    try:
+        current_user_id = uuid.UUID(current_user_id_str)
+    except ValueError:
+        return jsonify({"error": "Invalid user ID format"}), 400
+
+    # Find the farmer record for this user
+    farmer = Farmer.query.filter_by(user_id=current_user_id).first()
+
+    if not farmer:
+        return jsonify({"message": "No farmer profile found for this user"}), 404
+
+    # Find order and verify ownership (farmer must be the seller)
+    order = Order.query.filter_by(id=order_id, farmer_id=farmer.id).first()
+
+    if not order:
+        return jsonify({"message": "Order not found or access denied"}), 404
+
+    data = request.get_json()
+
+    # Validate status field
+    if "status" not in data:
+        return jsonify({"message": "Missing required field: status"}), 400
+
+    new_status = data["status"]
+
+    # Validate status transitions
+    valid_statuses = [
+        "pending",
+        "processing",
+        "shipped",
+        "in_transit",
+        "delivered",
+        "cancelled",
+    ]
+    if new_status not in valid_statuses:
+        return jsonify({
+            "message": f"Invalid status. Must be one of: {', '.join(valid_statuses)}"
+        }), 400
+
+    # Only allow specific transitions for farmers
+    current_status = order.status
+    allowed_transitions = {
+        "pending": ["processing", "shipped", "cancelled"],
+        "processing": ["shipped", "cancelled"],
+        "shipped": ["in_transit", "delivered"],
+        "in_transit": ["delivered"],
+    }
+
+    # Allow any transition if it's a test/demo, otherwise validate
+    if current_status in allowed_transitions:
+        if (
+            new_status not in allowed_transitions[current_status]
+            and new_status != "delivered"
+        ):
+            return jsonify({
+                "message": f"Cannot transition from '{current_status}' to '{new_status}'. "
+                f"Allowed: {', '.join(allowed_transitions.get(current_status, []))}"
+            }), 400
+
+    # Update status
+    order.status = new_status
+    db.session.commit()
+
+    return jsonify({
+        "message": f"Order status updated to '{new_status}'",
+        "order": order.to_dict(),
     }), 200

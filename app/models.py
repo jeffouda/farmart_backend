@@ -7,11 +7,13 @@ from werkzeug.security import generate_password_hash, check_password_hash
 
 db = SQLAlchemy()
 
+
 # Role Definitions using Enum for Type Safety
 class UserRole(str, Enum):
     ADMIN = "admin"
     FARMER = "farmer"
     BUYER = "buyer"
+
 
 # Base Mixin for Audit Trails
 class TimestampMixin:
@@ -19,6 +21,7 @@ class TimestampMixin:
     updated_at = db.Column(
         db.DateTime, default=datetime.utcnow, onupdate=datetime.utcnow
     )
+
 
 class User(db.Model, TimestampMixin):
     __tablename__ = "users"
@@ -95,7 +98,9 @@ class Animal(db.Model, TimestampMixin):
 
     id = db.Column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
     # Farmer ID is now a UUID
-    farmer_id = db.Column(UUID(as_uuid=True), db.ForeignKey("farmers.id"), nullable=False)
+    farmer_id = db.Column(
+        UUID(as_uuid=True), db.ForeignKey("farmers.id"), nullable=False
+    )
 
     species = db.Column(db.String(50), nullable=False)
     breed = db.Column(db.String(100))
@@ -104,6 +109,7 @@ class Animal(db.Model, TimestampMixin):
     price = db.Column(db.Numeric(10, 2), nullable=False)
     status = db.Column(db.String(20), default="available")
     gender = db.Column(db.String(20))
+    description = db.Column(db.Text)
     health_history = db.Column(db.Text)
     image_url = db.Column(db.String(255))
 
@@ -117,6 +123,7 @@ class Animal(db.Model, TimestampMixin):
             "price": float(self.price),
             "status": self.status,
             "gender": self.gender,
+            "description": self.description,
             "health_history": self.health_history,
             "image_url": self.image_url,
             "farmer_name": self.owner.farm_name if self.owner else None,
@@ -131,8 +138,12 @@ class Order(db.Model, TimestampMixin):
     id = db.Column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
     # Buyer and Farmer are now UUIDs
     buyer_id = db.Column(UUID(as_uuid=True), db.ForeignKey("buyers.id"), nullable=False)
-    farmer_id = db.Column(UUID(as_uuid=True), db.ForeignKey("farmers.id"), nullable=False)
-    bargain_id = db.Column(db.Integer, db.ForeignKey("bargain_sessions.id"), nullable=True)
+    farmer_id = db.Column(
+        UUID(as_uuid=True), db.ForeignKey("farmers.id"), nullable=False
+    )
+    bargain_id = db.Column(
+        db.Integer, db.ForeignKey("bargain_sessions.id"), nullable=True
+    )
 
     items = db.Column(db.JSON, nullable=False)
     total_amount = db.Column(db.Numeric(10, 2), nullable=False)
@@ -161,7 +172,9 @@ class Review(db.Model, TimestampMixin):
 
     id = db.Column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
     order_id = db.Column(UUID(as_uuid=True), db.ForeignKey("orders.id"), nullable=False)
-    reviewer_id = db.Column(UUID(as_uuid=True), db.ForeignKey("users.id"), nullable=False)
+    reviewer_id = db.Column(
+        UUID(as_uuid=True), db.ForeignKey("users.id"), nullable=False
+    )
     target_id = db.Column(UUID(as_uuid=True), db.ForeignKey("users.id"), nullable=False)
 
     rating = db.Column(db.Integer, nullable=False)
@@ -169,8 +182,12 @@ class Review(db.Model, TimestampMixin):
     tags = db.Column(db.JSON, nullable=True)
 
     order = db.relationship("Order", backref="review")
-    reviewer = db.relationship("User", foreign_keys=[reviewer_id], backref="reviews_given")
-    target = db.relationship("User", foreign_keys=[target_id], backref="reviews_received")
+    reviewer = db.relationship(
+        "User", foreign_keys=[reviewer_id], backref="reviews_given"
+    )
+    target = db.relationship(
+        "User", foreign_keys=[target_id], backref="reviews_received"
+    )
 
 
 class Wishlist(db.Model, TimestampMixin):
@@ -178,7 +195,9 @@ class Wishlist(db.Model, TimestampMixin):
 
     id = db.Column(db.Integer, primary_key=True, autoincrement=True)
     user_id = db.Column(UUID(as_uuid=True), db.ForeignKey("users.id"), nullable=False)
-    animal_id = db.Column(UUID(as_uuid=True), db.ForeignKey("animals.id"), nullable=False)
+    animal_id = db.Column(
+        UUID(as_uuid=True), db.ForeignKey("animals.id"), nullable=False
+    )
 
     animal = db.relationship("Animal", backref="wishlisted_by", lazy=True)
 
@@ -187,10 +206,14 @@ class BargainSession(db.Model, TimestampMixin):
     __tablename__ = "bargain_sessions"
 
     id = db.Column(db.Integer, primary_key=True, autoincrement=True)
-    animal_id = db.Column(UUID(as_uuid=True), db.ForeignKey("animals.id"), nullable=False)
+    animal_id = db.Column(
+        UUID(as_uuid=True), db.ForeignKey("animals.id"), nullable=False
+    )
     # Corrected to UUID to match Buyer and Farmer
     buyer_id = db.Column(UUID(as_uuid=True), db.ForeignKey("buyers.id"), nullable=False)
-    farmer_id = db.Column(UUID(as_uuid=True), db.ForeignKey("farmers.id"), nullable=False)
+    farmer_id = db.Column(
+        UUID(as_uuid=True), db.ForeignKey("farmers.id"), nullable=False
+    )
 
     initial_offer = db.Column(db.Numeric(10, 2), nullable=False)
     final_price = db.Column(db.Numeric(10, 2), nullable=True)
@@ -205,6 +228,7 @@ class BargainSession(db.Model, TimestampMixin):
 
     def to_dict(self, include_messages=True):
         from app.models import Order
+
         linked_order = Order.query.filter_by(bargain_id=self.id).first()
         return {
             "id": str(self.id),
@@ -220,7 +244,9 @@ class BargainMessage(db.Model):
     __tablename__ = "bargain_messages"
 
     id = db.Column(db.Integer, primary_key=True, autoincrement=True)
-    session_id = db.Column(db.Integer, db.ForeignKey("bargain_sessions.id"), nullable=False)
+    session_id = db.Column(
+        db.Integer, db.ForeignKey("bargain_sessions.id"), nullable=False
+    )
     sender_id = db.Column(UUID(as_uuid=True), db.ForeignKey("users.id"), nullable=False)
     sender_role = db.Column(db.String(20), nullable=False)
     message = db.Column(db.Text, nullable=False)
@@ -232,5 +258,47 @@ class BargainMessage(db.Model):
             "id": str(self.id),
             "session_id": str(self.session_id),
             "message": self.message,
-            "created_at": self.created_at.isoformat()
+            "created_at": self.created_at.isoformat(),
+        }
+
+
+class Message(db.Model):
+    """
+    General messaging for livestock inquiries.
+    Buyers can message farmers about specific livestock.
+    """
+
+    __tablename__ = "messages"
+
+    id = db.Column(db.Integer, primary_key=True, autoincrement=True)
+    sender_id = db.Column(UUID(as_uuid=True), db.ForeignKey("users.id"), nullable=False)
+    receiver_id = db.Column(
+        UUID(as_uuid=True), db.ForeignKey("users.id"), nullable=False
+    )
+    livestock_id = db.Column(
+        UUID(as_uuid=True), db.ForeignKey("animals.id"), nullable=False
+    )
+    content = db.Column(db.Text, nullable=False)
+    created_at = db.Column(db.DateTime, default=datetime.utcnow)
+    is_read = db.Column(db.Boolean, default=False)
+
+    # Relationships
+    sender = db.relationship("User", foreign_keys=[sender_id], backref="sent_messages")
+    receiver = db.relationship(
+        "User", foreign_keys=[receiver_id], backref="received_messages"
+    )
+    livestock = db.relationship("Animal", backref="messages")
+
+    def to_dict(self, include_sender_name=True):
+        return {
+            "id": str(self.id),
+            "sender_id": str(self.sender_id),
+            "receiver_id": str(self.receiver_id),
+            "livestock_id": str(self.livestock_id),
+            "content": self.content,
+            "sender_name": self.sender.full_name
+            if include_sender_name and self.sender
+            else None,
+            "is_read": self.is_read,
+            "created_at": self.created_at.isoformat() if self.created_at else None,
         }
