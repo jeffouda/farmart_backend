@@ -33,6 +33,7 @@ def create_app(config_name="default"):
     from app.livestock import livestock_bp
     from app.disputes import disputes_bp
     from app.reviews import reviews_bp
+    from app.analytics import analytics_bp
 
     app.register_blueprint(auth_bp)
     app.register_blueprint(orders_bp)
@@ -41,6 +42,7 @@ def create_app(config_name="default"):
     app.register_blueprint(livestock_bp)
     app.register_blueprint(disputes_bp)
     app.register_blueprint(reviews_bp)
+    app.register_blueprint(analytics_bp)
 
     # Health check endpoint
     @app.route("/api/health", methods=["GET"])
