@@ -160,16 +160,20 @@ class EscrowRecord(db.Model, TimestampMixin):
     id = db.Column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
     order_id = db.Column(UUID(as_uuid=True), db.ForeignKey("orders.id"), nullable=False)
     
+    # Using Numeric(10, 2) is best practice for currency to avoid floating-point errors
     amount = db.Column(db.Numeric(10, 2), nullable=False)
     seller_phone = db.Column(db.String(20), nullable=False) # Essential for B2C payout
-    status = db.Column(db.String(20), default="pending") # pending, held, released, disputed, refunded
     
-    mpesa_receipt = db.Column(db.String(100), nullable=True)
-    b2c_conversation_id = db.Column(db.String(100), nullable=True)
+    # Statuses: pending (initial), held (paid by buyer), released (paid to farmer), 
+    # disputed (hold on funds), refunded (returned to buyer)
+    status = db.Column(db.String(20), default="pending") 
+    
+    # M-Pesa Tracking
+    mpesa_receipt = db.Column(db.String(100), unique=True, nullable=True) # Unique receipt from STK callback
+    b2c_conversation_id = db.Column(db.String(100), unique=True, nullable=True) # Links to the farmer payout result
 
     def __repr__(self):
         return f"<Escrow Order: {self.order_id} | Status: {self.status}>"
-
 
 class Review(db.Model, TimestampMixin):
     __tablename__ = "reviews"
