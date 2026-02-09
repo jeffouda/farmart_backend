@@ -3,6 +3,10 @@ from app.models import db, Order, EscrowRecord, Farmer
 from app.services.mpesa_service import MpesaService
 from . import payment_bp
 
+# ==========================================
+# 1. USER ROUTES (Mobile/Web App hits these)
+# ==========================================
+
 @payment_bp.route('/stk-push/<uuid:order_id>', methods=['POST'])
 def trigger_payment(order_id):
     """Starts the Lipa na M-Pesa STK Push process for the Buyer."""
@@ -21,6 +25,32 @@ def trigger_payment(order_id):
     
     return jsonify({"error": "Failed to initiate payment", "details": response}), 400
 
+
+@payment_bp.route('/release-escrow/<uuid:order_id>', methods=['POST'])
+def release_funds(order_id):
+    """Manual trigger to pay the Farmer via B2C payout."""
+    order = Order.query.get_or_404(order_id)
+    escrow = EscrowRecord.query.filter_by(order_id=order_id, status="held").first()
+
+    if not escrow:
+        return jsonify({"error": "No held funds found for this order"}), 404
+
+    # Call the service to send money from Business to Customer (Farmer)
+    response = MpesaService.initiate_b2c(escrow.seller_phone, escrow.amount, order.id)
+    
+    if response.get('ResponseCode') == '0':
+        escrow.b2c_conversation_id = response.get('ConversationID')
+        escrow.status = "releasing"
+        order.status = "completed"
+        db.session.commit()
+        return jsonify({"message": "Payout to farmer initiated"}), 200
+
+    return jsonify({"error": "Payout failed to initiate", "details": response}), 400
+
+
+# ==========================================
+# 2. SAFARICOM CALLBACKS (Webhooks)
+# ==========================================
 
 @payment_bp.route('/callback/stk', methods=['POST'])
 def mpesa_stk_callback():
@@ -55,32 +85,10 @@ def mpesa_stk_callback():
         current_app.logger.info(f"Payment success for Order {order.id}. Receipt: {receipt_number}")
     else:
         order.payment_status = "failed"
-        current_app.logger.warning(f"Payment failed for Order {order.id}. Result Code: {result_code}")
+        current_app.logger.warning(f"Payment failed for Order {order.id}. Code: {result_code}")
 
     db.session.commit()
     return jsonify({"ResultCode": 0, "ResultDesc": "Accepted"}), 200
-
-
-@payment_bp.route('/release-escrow/<uuid:order_id>', methods=['POST'])
-def release_funds(order_id):
-    """Triggered by Buyer to pay the Farmer via B2C payout."""
-    order = Order.query.get_or_404(order_id)
-    escrow = EscrowRecord.query.filter_by(order_id=order_id, status="held").first()
-
-    if not escrow:
-        return jsonify({"error": "No held funds found for this order"}), 404
-
-    # Call the service to send money from Business to Customer (Farmer)
-    response = MpesaService.initiate_b2c(escrow.seller_phone, escrow.amount, order.id)
-    
-    if response.get('ResponseCode') == '0':
-        escrow.b2c_conversation_id = response.get('ConversationID')
-        escrow.status = "releasing"
-        order.status = "completed"
-        db.session.commit()
-        return jsonify({"message": "Payout to farmer initiated"}), 200
-
-    return jsonify({"error": "Payout failed to initiate", "details": response}), 400
 
 
 @payment_bp.route('/callback/b2c', methods=['POST'])
@@ -93,6 +101,7 @@ def mpesa_b2c_callback():
     escrow = EscrowRecord.query.filter_by(b2c_conversation_id=conversation_id).first()
     
     if not escrow:
+        # We return 200 to Safaricom even if we don't find the record to stop retries
         return jsonify({"ResultCode": 0, "ResultDesc": "Accepted"}), 200
 
     if result_code == 0:
