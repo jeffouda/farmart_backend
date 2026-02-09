@@ -69,4 +69,25 @@ def create_app(config_name="default"):
     def health_check():
         return jsonify({"status": "online", "message": "System is healthy"}), 200
 
+    # Root endpoint - API info
+    @app.route("/", methods=["GET"])
+    def root():
+        return jsonify({
+            "name": "FarmArt API",
+            "version": "1.0",
+            "status": "running",
+            "endpoints": {
+                "health": "/api/health",
+                "auth": "/auth/login, /auth/register, /auth/me",
+                "livestock": "/livestock/all, /livestock/<id>",
+                "orders": "/orders/",
+                "wishlist": "/wishlist/",
+                "bargain": "/bargain/sessions",
+                "reviews": "/reviews/",
+                "disputes": "/disputes/",
+                "analytics": "/analytics/farmer",
+                "negotiation": "/api/negotiation/<livestock_id>"
+            }
+        }), 200
+
     return app
