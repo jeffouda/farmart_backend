@@ -6,6 +6,58 @@ from . import livestock_bp
 import uuid
 
 
+@livestock_bp.route("/stats", methods=["GET"])
+@jwt_required()
+def get_inventory_stats():
+    """
+    Get inventory statistics for farmer dashboard.
+    Returns count of animals by status.
+    """
+    user_id_str = get_jwt_identity()
+
+    try:
+        user_id_uuid = uuid.UUID(user_id_str)
+    except ValueError:
+        return jsonify({"error": "Invalid user ID format"}), 400
+
+    user = User.query.get(user_id_uuid)
+    if not user:
+        return jsonify({"error": "User not found"}), 404
+
+    # Only farmers can view their inventory stats
+    if user.role.value != "farmer":
+        return jsonify({"error": "Only farmers can view inventory stats"}), 403
+
+    farmer = Farmer.query.filter_by(user_id=user_id_uuid).first()
+    if not farmer:
+        return jsonify({"error": "Farmer profile not found"}), 404
+
+    # Get counts by status
+    available_count = Animal.query.filter_by(
+        farmer_id=farmer.id, 
+        status="available"
+    ).count()
+
+    pending_count = Animal.query.filter_by(
+        farmer_id=farmer.id, 
+        status="pending"
+    ).count()
+
+    sold_count = Animal.query.filter_by(
+        farmer_id=farmer.id, 
+        status="sold"
+    ).count()
+
+    total_count = Animal.query.filter_by(farmer_id=farmer.id).count()
+
+    return jsonify({
+        "total": total_count,
+        "available": available_count,
+        "pending": pending_count,
+        "sold": sold_count,
+    }), 200
+
+
 @livestock_bp.route("/seed_test", methods=["POST"])
 @jwt_required()
 def seed_test_animal():
