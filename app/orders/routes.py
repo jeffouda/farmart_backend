@@ -196,7 +196,7 @@ def update_order(order_id):
 @jwt_required()
 def get_order_stats():
     """
-    Get order statistics for the current user.
+    Get order statistics for the current user (as buyer).
     Returns total orders and total spent.
     """
     current_user_id_str = get_jwt_identity()
@@ -221,6 +221,73 @@ def get_order_stats():
     return jsonify({
         "total_orders": total_orders,
         "total_spent": round(total_spent, 2),
+    }), 200
+
+
+@orders_bp.route("/farmer-stats", methods=["GET"])
+@jwt_required()
+def get_farmer_order_stats():
+    """
+    Get order statistics for the current authenticated user (as farmer/seller).
+    Returns:
+    - Total sales count
+    - Total revenue
+    - Orders by status
+    """
+    current_user_id_str = get_jwt_identity()
+
+    try:
+        current_user_id = uuid.UUID(current_user_id_str)
+    except ValueError:
+        return jsonify({"error": "Invalid user ID format"}), 400
+
+    user = User.query.get(current_user_id)
+    if not user:
+        return jsonify({"error": "User not found"}), 404
+
+    # Only farmers can view their sales stats
+    if user.role.value != "farmer":
+        return jsonify({"error": "Only farmers can view sales stats"}), 403
+
+    farmer = Farmer.query.filter_by(user_id=current_user_id).first()
+    if not farmer:
+        return jsonify({"error": "Farmer profile not found"}), 404
+
+    # Get all orders for this farmer
+    orders = Order.query.filter_by(farmer_id=farmer.id).all()
+
+    # Count by status
+    pending_count = sum(1 for o in orders if o.status == "pending")
+    paid_count = sum(1 for o in orders if o.status == "paid")
+    shipped_count = sum(1 for o in orders if o.status == "shipped")
+    delivered_count = sum(1 for o in orders if o.status == "delivered")
+    cancelled_count = sum(1 for o in orders if o.status == "cancelled")
+
+    # Calculate revenue (only from delivered orders)
+    total_revenue = sum(float(o.total_amount) for o in orders if o.status == "delivered")
+    pending_revenue = sum(float(o.total_amount) for o in orders if o.status in ["pending", "paid", "shipped"])
+
+    # Active orders (need action)
+    active_orders = sum(1 for o in orders if o.status in ["pending", "paid"])
+
+    # Completed orders
+    completed_orders = sum(1 for o in orders if o.status == "delivered")
+
+    return jsonify({
+        "total_sales": len(orders),
+        "total_revenue": round(total_revenue, 2),
+        "pending_revenue": round(pending_revenue, 2),
+        "pending_orders": pending_count,
+        "active_orders": active_orders,
+        "completed_orders": completed_orders,
+        "cancelled_orders": cancelled_count,
+        "by_status": {
+            "pending": pending_count,
+            "paid": paid_count,
+            "shipped": shipped_count,
+            "delivered": delivered_count,
+            "cancelled": cancelled_count,
+        }
     }), 200
 
 
