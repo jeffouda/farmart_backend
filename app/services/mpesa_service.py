@@ -59,3 +59,30 @@ class MpesaService:
             headers=headers
         )
         return res.json()
+    
+
+    @classmethod
+    def initiate_b2c(cls, phone, amount, order_id):
+        """Initiates payout from Escrow to Farmer (Seller)."""
+        token = cls.get_access_token()
+        headers = {"Authorization": f"Bearer {token}"}
+        
+        payload = {
+            "InitiatorName": current_app.config['MPESA_INITIATOR_NAME'],
+            "SecurityCredential": current_app.config['MPESA_SECURITY_CREDENTIAL'],
+            "CommandID": "BusinessPayment",
+            "Amount": int(amount),
+            "PartyA": current_app.config['MPESA_SHORTCODE'],
+            "PartyB": phone,
+            "Remarks": f"Escrow Release Order {order_id}",
+            "QueueTimeOutURL": f"{current_app.config['BASE_URL']}/api/payments/callback/timeout",
+            "ResultURL": f"{current_app.config['BASE_URL']}/api/payments/callback/b2c",
+            "Occassion": "FarmartPayout"
+        }
+        
+        res = requests.post(
+            "https://sandbox.safaricom.co.ke/mpesa/b2c/v1/paymentrequest",
+            json=payload,
+            headers=headers
+        )
+        return res.json()
