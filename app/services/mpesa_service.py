@@ -18,3 +18,15 @@ class MpesaService:
         except Exception as e:
             current_app.logger.error(f"Mpesa Token Error: {e}")
             return None
+        
+
+    @staticmethod
+    def generate_password():
+        """Generates the STK Push password."""
+        shortcode = current_app.config['MPESA_SHORTCODE']
+        passkey = current_app.config['MPESA_PASSKEY']
+        timestamp = datetime.now().strftime('%Y%m%d%H%M%S')
+        
+        data_to_encode = shortcode + passkey + timestamp
+        online_password = base64.b64encode(data_to_encode.encode()).decode('utf-8')
+        return online_password, timestamp
