@@ -57,7 +57,7 @@ def register():
     # Create the Base User with profile data
     new_user = User(
         email=email,
-        role=role,
+        role=UserRole(role),
         full_name=full_name,
         phone_number=phone_number,
         location=location,
