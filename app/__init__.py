@@ -20,10 +20,19 @@ def create_app(config_name="default"):
     app.config.from_object(app_config)
 
     # Initialize extensions
-    CORS(app)
     db.init_app(app)
     migrate.init_app(app, db)
     jwt.init_app(app)
+
+    # Enable CORS **only for API routes** and allow necessary headers/methods
+    CORS(
+        app,
+        resources={r"/api/*": {"origins": "http://localhost:5173"}},
+        supports_credentials=True,
+        expose_headers=["Content-Type", "Authorization"],
+        allow_headers=["Content-Type", "Authorization"],
+        methods=["GET", "POST", "PUT", "DELETE", "OPTIONS"],
+    )
 
     # Register blueprints
     from app.auth import auth_bp

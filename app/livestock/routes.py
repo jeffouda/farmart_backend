@@ -146,6 +146,7 @@ def list_animals():
     }), 200
 
 
+@livestock_bp.route("", methods=["GET"])
 @livestock_bp.route("/all", methods=["GET"])
 def get_all_livestock():
     """
