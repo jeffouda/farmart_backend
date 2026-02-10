@@ -1,3 +1,4 @@
+import os
 from flask import Flask, jsonify
 from flask_cors import CORS
 from .models import db
@@ -7,7 +8,6 @@ from config import config
 
 migrate = Migrate()
 jwt = JWTManager()
-
 
 def create_app(config_name="default"):
     app = Flask(__name__)
@@ -25,7 +25,8 @@ def create_app(config_name="default"):
     migrate.init_app(app, db)
     jwt.init_app(app)
 
-    # Register blueprints
+    # Register blueprints with proper URL prefixes
+    # This solves the 404 errors by mapping prefixes like /api/orders
     from app.auth import auth_bp
     from app.orders import orders_bp
     from app.wishlist import wishlist_bp
@@ -34,19 +35,38 @@ def create_app(config_name="default"):
     from app.disputes import disputes_bp
     from app.reviews import reviews_bp
     from app.analytics import analytics_bp
+    # Import your payment blueprint here
+    from app.payments import payment_bp 
 
-    app.register_blueprint(auth_bp)
-    app.register_blueprint(orders_bp)
-    app.register_blueprint(wishlist_bp)
-    app.register_blueprint(bargain_bp)
-    app.register_blueprint(livestock_bp)
-    app.register_blueprint(disputes_bp)
-    app.register_blueprint(reviews_bp)
-    app.register_blueprint(analytics_bp)
+    app.register_blueprint(auth_bp, url_prefix='/api/auth')
+    app.register_blueprint(orders_bp, url_prefix='/api/orders')
+    app.register_blueprint(wishlist_bp, url_prefix='/api/wishlist')
+    app.register_blueprint(bargain_bp, url_prefix='/api/bargain')
+    app.register_blueprint(livestock_bp, url_prefix='/api/livestock')
+    app.register_blueprint(disputes_bp, url_prefix='/api/disputes')
+    app.register_blueprint(reviews_bp, url_prefix='/api/reviews')
+    app.register_blueprint(analytics_bp, url_prefix='/api/analytics')
+    app.register_blueprint(payment_bp, url_prefix='/api/payments')
 
     # Health check endpoint
     @app.route("/api/health", methods=["GET"])
     def health_check():
         return jsonify({"status": "online", "message": "System is healthy"}), 200
+
+    # Root endpoint - API info
+    @app.route("/", methods=["GET"])
+    def root():
+        return jsonify({
+            "name": "FarmArt API",
+            "version": "1.0",
+            "status": "running",
+            "endpoints": {
+                "health": "/api/health",
+                "auth": "/api/auth/login",
+                "livestock": "/api/livestock/all",
+                "orders": "/api/orders/",
+                "payments": "/api/payments/"
+            }
+        }), 200
 
     return app
