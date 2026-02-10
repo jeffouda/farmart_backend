@@ -18,7 +18,7 @@ def get_my_orders():
 
     buyer = Buyer.query.filter_by(user_id=current_user_id).first()
     if not buyer:
-        return jsonify({"message": "No buyer profile found"}), 404
+        return jsonify({"message": "No buyer profile found for this user"}), 404
 
     # We only show orders that are 'paid' or further in the process
     orders = Order.query.filter(
@@ -41,7 +41,7 @@ def get_my_sales():
 
     farmer = Farmer.query.filter_by(user_id=current_user_id).first()
     if not farmer:
-        return jsonify({"message": "No farmer profile found"}), 404
+        return jsonify({"message": "No farmer profile found for this user"}), 404
 
     # Farmers only see orders that have actually been paid
     orders = Order.query.filter(
@@ -64,11 +64,15 @@ def create_order():
 
     buyer = Buyer.query.filter_by(user_id=current_user_id).first()
     if not buyer:
-        return jsonify({"message": "No buyer profile found"}), 404
+        return jsonify({"message": "No buyer profile found for this user"}), 404
 
     data = request.get_json()
-    if not data or "items" not in data or "total_amount" not in data or "phone_number" not in data:
-        return jsonify({"message": "Missing required fields"}), 400
+    
+    # Flexibility check for phone key to prevent KeyError
+    phone = data.get("phone_number") or data.get("phone")
+    
+    if not data or "items" not in data or "total_amount" not in data or not phone:
+        return jsonify({"message": "Missing required fields: items, total_amount, phone_number"}), 400
 
     # Determine farmer from first item
     items = data["items"]
@@ -79,10 +83,9 @@ def create_order():
             farmer_id = animal.farmer_id
 
     if not farmer_id:
-        return jsonify({"message": "Could not determine farmer"}), 400
+        return jsonify({"message": "Could not determine farmer for the order"}), 400
 
     # 1. Save order as 'payment_pending'
-    # This ensures we have the data, but it isn't "live" yet.
     order = Order(
         buyer_id=buyer.id,
         farmer_id=farmer_id,
@@ -96,12 +99,19 @@ def create_order():
     db.session.commit()
 
     # 2. Trigger M-Pesa STK Push
-    # Use the order.id as AccountReference so the callback can find this order.
-    stk_response = MpesaService.stk_push(
-        phone_number=data["phone_number"],
-        amount=int(float(data["total_amount"])),
-        order_id=str(order.id)
-    )
+    # Using positional arguments (value, value, value) to avoid TypeError: unexpected keyword argument
+    try:
+        stk_response = MpesaService.stk_push(
+            phone, 
+            int(float(data["total_amount"])), 
+            str(order.id)
+        )
+    except Exception as e:
+        return jsonify({
+            "message": "Order initiated, but M-Pesa failed to trigger",
+            "error": str(e),
+            "order_id": order.id
+        }), 201
 
     return jsonify({
         "message": "Payment initiated. Please enter your M-Pesa PIN.",
@@ -117,7 +127,7 @@ def get_order_status(order_id):
     order = Order.query.get_or_404(order_id)
     return jsonify({
         "order_id": order.id,
-        "status": order.status, # Will change to 'paid' via callback
+        "status": order.status, 
         "is_paid": order.status != "payment_pending"
     }), 200
 
@@ -162,6 +172,10 @@ def create_order_from_bargain():
     current_user_id_str = get_jwt_identity()
     data = request.get_json()
     
+    phone = data.get("phone_number") or data.get("phone")
+    if not data or "bargain_id" not in data or not phone:
+        return jsonify({"message": "Missing bargain_id or phone_number"}), 400
+        
     buyer = Buyer.query.filter_by(user_id=uuid.UUID(current_user_id_str)).first()
     bargain = BargainSession.query.get_or_404(data["bargain_id"])
     animal = Animal.query.get(bargain.animal_id)
@@ -180,7 +194,7 @@ def create_order_from_bargain():
     db.session.add(order)
     db.session.commit()
 
-    MpesaService.stk_push(data["phone_number"], int(float(agreed_price)), str(order.id))
+    MpesaService.stk_push(phone, int(float(agreed_price)), str(order.id))
 
     return jsonify({"message": "Bargain payment initiated", "order_id": order.id}), 201
 
