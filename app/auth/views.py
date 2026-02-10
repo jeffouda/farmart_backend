@@ -57,7 +57,7 @@ def register():
     # Create the Base User with profile data
     new_user = User(
         email=email,
-        role=role,
+        role=UserRole(role),
         full_name=full_name,
         phone_number=phone_number,
         location=location,
@@ -67,7 +67,7 @@ def register():
     db.session.add(new_user)
     db.session.flush()  # Generates the user_id for the next step
 
-    #  Create Profile based on Role
+    # Create Profile based on Role
     if role == "farmer":
         # Farmers require farm_name, location, and phone_number
         if not all([
@@ -102,7 +102,7 @@ def register():
         )
         db.session.add(new_profile)
 
-    # 4. Commit everything
+    # Commit everything
     try:
         db.session.commit()
         return jsonify({
