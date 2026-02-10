@@ -41,7 +41,7 @@ class User(db.Model, TimestampMixin):
     average_rating = db.Column(db.Float, default=0.0)
     review_count = db.Column(db.Integer, default=0)
 
-    # Polymorphic relationships to Farmer and Buyer
+    # Polymorphic relationships
     farmer = db.relationship(
         "Farmer", backref="user", uselist=False, cascade="all, delete-orphan"
     )
@@ -62,7 +62,6 @@ class User(db.Model, TimestampMixin):
 class Farmer(db.Model, TimestampMixin):
     __tablename__ = "farmers"
 
-    # Changed to UUID to match your existing DB state
     id = db.Column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
     user_id = db.Column(UUID(as_uuid=True), db.ForeignKey("users.id"), nullable=False)
 
@@ -72,7 +71,6 @@ class Farmer(db.Model, TimestampMixin):
     is_verified = db.Column(db.Boolean, default=False)
     wallet_balance = db.Column(db.Numeric(10, 2), default=0)
 
-    # Livestock relationship
     animals = db.relationship("Animal", backref="owner", lazy=True)
 
     def __repr__(self):
@@ -82,7 +80,6 @@ class Farmer(db.Model, TimestampMixin):
 class Buyer(db.Model, TimestampMixin):
     __tablename__ = "buyers"
 
-    # Changed to UUID to match your existing DB state
     id = db.Column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
     user_id = db.Column(UUID(as_uuid=True), db.ForeignKey("users.id"), nullable=False)
 
@@ -90,14 +87,13 @@ class Buyer(db.Model, TimestampMixin):
     preferred_contact = db.Column(db.String(50))
 
     def __repr__(self):
-        return f"<Buyer {self.user_id} | Contact: {self.preferred_contact}>"
+        return f"<Buyer {self.user_id}>"
 
 
 class Animal(db.Model, TimestampMixin):
     __tablename__ = "animals"
 
     id = db.Column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
-    # Farmer ID is now a UUID
     farmer_id = db.Column(
         UUID(as_uuid=True), db.ForeignKey("farmers.id"), nullable=False
     )
@@ -136,7 +132,6 @@ class Order(db.Model, TimestampMixin):
     __tablename__ = "orders"
 
     id = db.Column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
-    # Buyer and Farmer are now UUIDs
     buyer_id = db.Column(UUID(as_uuid=True), db.ForeignKey("buyers.id"), nullable=False)
     farmer_id = db.Column(
         UUID(as_uuid=True), db.ForeignKey("farmers.id"), nullable=False
@@ -147,13 +142,20 @@ class Order(db.Model, TimestampMixin):
 
     items = db.Column(db.JSON, nullable=False)
     total_amount = db.Column(db.Numeric(10, 2), nullable=False)
-    status = db.Column(db.String(20), default="pending")
+    status = db.Column(
+        db.String(20), default="pending"
+    )  # pending, held, completed, cancelled
     payment_status = db.Column(db.String(20), default="pending")
     payment_method = db.Column(db.String(50), default="mpesa")
+    checkout_id = db.Column(db.String(100), nullable=True)  # Linked to M-Pesa STK Push
     has_review = db.Column(db.Boolean, default=False)
 
     buyer = db.relationship("Buyer", backref="orders")
     farmer = db.relationship("Farmer", backref="orders")
+    # Link to the detailed escrow tracking
+    escrow = db.relationship(
+        "EscrowRecord", backref="order", uselist=False, cascade="all, delete-orphan"
+    )
 
     def to_dict(self):
         return {
@@ -163,8 +165,35 @@ class Order(db.Model, TimestampMixin):
             "items": self.items,
             "total_amount": float(self.total_amount),
             "status": self.status,
+            "payment_status": self.payment_status,
             "created_at": self.created_at.isoformat() if self.created_at else None,
         }
+
+
+class EscrowRecord(db.Model, TimestampMixin):
+    __tablename__ = "escrow_records"
+
+    id = db.Column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
+    order_id = db.Column(UUID(as_uuid=True), db.ForeignKey("orders.id"), nullable=False)
+
+    # Using Numeric(10, 2) is best practice for currency to avoid floating-point errors
+    amount = db.Column(db.Numeric(10, 2), nullable=False)
+    seller_phone = db.Column(db.String(20), nullable=False)  # Essential for B2C payout
+
+    # Statuses: pending (initial), held (paid by buyer), released (paid to farmer),
+    # disputed (hold on funds), refunded (returned to buyer)
+    status = db.Column(db.String(20), default="pending")
+
+    # M-Pesa Tracking
+    mpesa_receipt = db.Column(
+        db.String(100), unique=True, nullable=True
+    )  # Unique receipt from STK callback
+    b2c_conversation_id = db.Column(
+        db.String(100), unique=True, nullable=True
+    )  # Links to the farmer payout result
+
+    def __repr__(self):
+        return f"<Escrow Order: {self.order_id} | Status: {self.status}>"
 
 
 class Review(db.Model, TimestampMixin):
@@ -201,6 +230,15 @@ class Wishlist(db.Model, TimestampMixin):
 
     animal = db.relationship("Animal", backref="wishlisted_by", lazy=True)
 
+    def to_dict(self):
+        return {
+            "id": self.id,
+            "user_id": str(self.user_id),
+            "animal_id": str(self.animal_id),
+            "animal": self.animal.to_dict() if self.animal else None,
+            "created_at": self.created_at.isoformat() if self.created_at else None,
+        }
+
 
 class BargainSession(db.Model, TimestampMixin):
     __tablename__ = "bargain_sessions"
@@ -209,7 +247,6 @@ class BargainSession(db.Model, TimestampMixin):
     animal_id = db.Column(
         UUID(as_uuid=True), db.ForeignKey("animals.id"), nullable=False
     )
-    # Corrected to UUID to match Buyer and Farmer
     buyer_id = db.Column(UUID(as_uuid=True), db.ForeignKey("buyers.id"), nullable=False)
     farmer_id = db.Column(
         UUID(as_uuid=True), db.ForeignKey("farmers.id"), nullable=False

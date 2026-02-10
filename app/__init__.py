@@ -45,6 +45,7 @@ def create_app(config_name="default"):
     from app.reviews import reviews_bp
     from app.analytics import analytics_bp
     from app.negotiation import negotiation_bp
+    from app.payments import payment_bp
 
     app.register_blueprint(auth_bp)
     app.register_blueprint(orders_bp)
@@ -55,6 +56,7 @@ def create_app(config_name="default"):
     app.register_blueprint(reviews_bp)
     app.register_blueprint(analytics_bp)
     app.register_blueprint(negotiation_bp)
+    app.register_blueprint(payment_bp)
 
     # Serve uploaded images
     uploads_dir = os.path.join(os.getcwd(), "uploads")
@@ -86,7 +88,8 @@ def create_app(config_name="default"):
                 "reviews": "/reviews/",
                 "disputes": "/disputes/",
                 "analytics": "/analytics/farmer",
-                "negotiation": "/api/negotiation/<livestock_id>"
+                "negotiation": "/api/negotiation/<livestock_id>",
+                "payments": "/payments/"
             }
         }), 200
 
