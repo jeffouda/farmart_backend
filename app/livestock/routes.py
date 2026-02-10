@@ -5,8 +5,18 @@ from app.models import User, Farmer, Animal
 from . import livestock_bp
 import uuid
 import os
+import cloudinary
+import cloudinary.uploader
 from werkzeug.utils import secure_filename
 from datetime import datetime
+
+# Configure Cloudinary at module level
+cloudinary.config(
+    cloud_name=os.getenv("CLOUDINARY_CLOUD_NAME"),
+    api_key=os.getenv("CLOUDINARY_API_KEY"),
+    api_secret=os.getenv("CLOUDINARY_API_SECRET"),
+    secure=True,
+)
 
 
 @livestock_bp.route("/stats", methods=["GET"])
