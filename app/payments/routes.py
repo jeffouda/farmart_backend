@@ -64,76 +64,83 @@ def release_funds(order_id):
 @payment_bp.route('/callback/stk', methods=['POST'])
 def mpesa_stk_callback():
     """
-    Webhook: THIS IS WHERE THE ORDER IS ACTUALLY SAVED.
-    Safaricom calls this after the user enters their PIN.
+    Safaricom calls this when the user enters their PIN.
+    Updates order status, creates escrow, and marks animals as sold.
     """
-    data = request.json.get('Body', {}).get('stkCallback', {})
-    result_code = data.get('ResultCode')
+    payload = request.get_json()
+    current_app.logger.info(f"M-Pesa Callback Received: {payload}")
+
+    data = payload.get('Body', {}).get('stkCallback', {})
     checkout_id = data.get('CheckoutRequestID')
-
-    # ResultCode 0 means the user successfully entered their PIN
-    if result_code == 0:
-        # 1. Extract Metadata
-        meta_items = data.get('CallbackMetadata', {}).get('Item', [])
-        receipt = next((i.get('Value') for i in meta_items if i.get('Name') == 'MpesaReceiptNumber'), None)
-        amount = next((i.get('Value') for i in meta_items if i.get('Name') == 'Amount'), 0)
-        phone = next((i.get('Value') for i in meta_items if i.get('Name') == 'PhoneNumber'), None)
-
-        # 2. DATA RECONCILIATION 
-        # In a production app, you'd fetch the 'items' and 'buyer_id' from a Redis cache 
-        # using the checkout_id. For now, we assume your frontend sent specific data 
-        # or we reconstruct it.
-        
-        # Example logic to create the order now that money is confirmed:
-        # Note: You'll need to pass buyer/farmer IDs to the STK push or cache them
-        try:
-            new_order = Order(
-                checkout_id=checkout_id,
-                mpesa_receipt=receipt,
-                total_amount=amount,
-                status="paid",  # Set to paid immediately
-                payment_status="held", # Escrow state
-                payment_method="mpesa"
-                # items=... (fetched from cache)
-            )
-            db.session.add(new_order)
-            
-            # 3. Create the Escrow Record
-            escrow = EscrowRecord(
-                order_id=new_order.id,
-                amount=amount,
-                status="held",
-                mpesa_receipt=receipt
-            )
-            db.session.add(escrow)
-            db.session.commit()
-            
-            current_app.logger.info(f"ORDER CREATED: {new_order.id} for Receipt {receipt}")
-        except Exception as e:
-            current_app.logger.error(f"Error saving order after payment: {str(e)}")
-            db.session.rollback()
-
-    else:
-        current_app.logger.warning(f"Payment Failed or Cancelled. Code: {result_code}")
-
-    return jsonify({"ResultCode": 0, "ResultDesc": "Accepted"}), 200
-
-
-@payment_bp.route('/callback/b2c', methods=['POST'])
-def mpesa_b2c_callback():
-    """Webhook: Confirms when the Farmer actually receives the payout."""
-    data = request.json.get('Result', {})
-    conversation_id = data.get('ConversationID')
     result_code = data.get('ResultCode')
     
-    escrow = EscrowRecord.query.filter_by(b2c_conversation_id=conversation_id).first()
+    # 1. Find the order by CheckoutRequestID
+    order = Order.query.filter_by(checkout_id=checkout_id).first()
     
-    if result_code == 0 and escrow:
-        escrow.status = "completed"
-        db.session.commit()
-    
-    return jsonify({"ResultCode": 0, "ResultDesc": "Accepted"}), 200
+    if not order:
+        current_app.logger.error(f"Order not found for CheckoutRequestID: {checkout_id}")
+        return jsonify({"ResultCode": 1, "ResultDesc": "Order not found"}), 200
 
+    if result_code == 0:
+        # 2. Extract Receipt Metadata
+        items_meta = data.get('CallbackMetadata', {}).get('Item', [])
+        receipt = next((i.get('Value') for i in items_meta if i.get('Name') == 'MpesaReceiptNumber'), None)
+        
+        # 3. Fetch Farmer Details for EscrowRecord
+        farmer = Farmer.query.get(order.farmer_id)
+        seller_phone = getattr(farmer, 'phone', None) or "N/A"
+        
+        # 4. Update Order Status
+        order.status = "paid"
+        order.payment_status = "held"
+        order.mpesa_receipt = receipt
+        
+        # 5. MARK ANIMALS AS SOLD (Inventory Management)
+        # This ensures the animals are removed from the marketplace
+        if order.items:
+            for item in order.items:
+                animal_id = item.get('animal_id')
+                if animal_id:
+                    animal = Animal.query.get(animal_id)
+                    if animal:
+                        animal.status = "sold"
+                        animal.is_available = False # Use whichever field controls marketplace visibility
+                        current_app.logger.info(f"Animal {animal_id} marked as sold.")
+
+        # 6. Create/Update Escrow Record
+        try:
+            escrow = EscrowRecord.query.filter_by(order_id=order.id).first()
+            if not escrow:
+                escrow = EscrowRecord(
+                    order_id=order.id,
+                    amount=order.total_amount,
+                    status="held",
+                    mpesa_receipt=receipt,
+                    seller_phone=seller_phone
+                )
+                db.session.add(escrow)
+            else:
+                escrow.status = "held"
+                escrow.mpesa_receipt = receipt
+                escrow.seller_phone = seller_phone
+
+            db.session.commit()
+            current_app.logger.info(f"Payment Success & Inventory Updated: Order {order.id}")
+            
+        except Exception as e:
+            db.session.rollback()
+            current_app.logger.error(f"Database Error during callback: {str(e)}")
+            return jsonify({"ResultCode": 1, "ResultDesc": "Internal Database Error"}), 200
+    else:
+        # Payment failed (user cancelled, timeout, etc.)
+        order.status = "failed"
+        db.session.commit()
+        current_app.logger.warning(f"Payment failed for Order {order.id} with code {result_code}")
+
+    return jsonify({"ResultCode": 0, "ResultDesc": "Accepted"}), 200
+        
+
+    
 @payment_bp.route('/callback/timeout', methods=['POST'])
 def mpesa_timeout_callback():
     return jsonify({"ResultCode": 0, "ResultDesc": "Accepted"}), 200

@@ -49,8 +49,8 @@ class MpesaService:
             "PartyB": current_app.config['MPESA_SHORTCODE'],
             "PhoneNumber": phone,
             "CallBackURL": f"{current_app.config['BASE_URL']}/api/payments/callback/stk",
-            "AccountReference": f"Order_{order_id}",
-            "TransactionDesc": "Farmart Escrow Payment"
+            "AccountReference": "FarmartPay",
+            "TransactionDesc": "Farmart Livestock Payment"
         }
         
         res = requests.post(
