@@ -190,7 +190,24 @@ user = User.query.filter_by(id=farmer_uuid, role="farmer").first()
         "reviews": [review.to_dict() for review in reviews],
     }), 200
 
+def _update_farmer_rating(farmer_user_id):
+    """
+    Recalculate and update the farmer's average rating.
+    """
+    user = User.query.get(farmer_user_id)
+    if not user:
+        return
 
+    reviews = Review.query.filter_by(target_id=farmer_user_id).all()
+
+    if not reviews:
+        user.average_rating = 0.0
+        user.review_count = 0
+        return
+
+    total_ratings = sum(r.rating for r in reviews)
+    user.average_rating = total_ratings / len(reviews)
+    user.review_count = len(reviews)
 
     reviews = (
         Review.query
