@@ -69,6 +69,18 @@ def create_review():
 
     if not rating or not isinstance(rating, int) or rating < 1 or rating > 5:
         return jsonify({"error": "Rating must be an integer between 1 and 5"}), 400
+     buyer = Buyer.query.filter_by(user_id=current_user_id).first()
+    if not buyer:
+        return jsonify({"message": "No buyer profile found for this user"}), 404
+
+    order = Order.query.filter_by(id=order_uuid, buyer_id=buyer.id).first()
+    if not order:
+        return jsonify({"message": "Order not found or access denied"}), 404
+
+    if order.status not in ["delivered", "completed"]:
+        return jsonify({
+            "message": f"Order must be 'delivered' or 'completed' to leave a review. Current status: {order.status}"
+        }), 400
 
 
 
