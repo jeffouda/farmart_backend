@@ -61,6 +61,15 @@ def create_review():
 
     if not order_id:
         return jsonify({"error": "Order ID is required"}), 400
+    # Convert order_id to UUID
+    try:
+        order_uuid = uuid.UUID(order_id)
+    except ValueError:
+        return jsonify({"error": "Invalid order ID format"}), 400
+
+    if not rating or not isinstance(rating, int) or rating < 1 or rating > 5:
+        return jsonify({"error": "Rating must be an integer between 1 and 5"}), 400
+
 
 
 
