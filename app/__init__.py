@@ -20,7 +20,32 @@ def create_app(config_name="default"):
     app_config = config.get(config_name, config["default"])
     app.config.from_object(app_config)
 
+<<<<<<< HEAD
     # Initialize extensions
+=======
+
+    # Initialize extensions
+    # Allow all origins for development (including ngrok)
+    CORS(app, resources={
+        r"/api/*": {
+            "origins": ["http://localhost:5173", "http://127.0.0.1:5173", 
+                       "*"]  # Allow all for development including ngrok
+        }
+    })
+
+    # Initialize extensions with CORS configuration
+    CORS(
+        app,
+        resources={
+            r"/api/*": {
+                "origins": ["http://localhost:5173", "http://127.0.0.1:5173"],
+                "methods": ["GET", "POST", "PUT", "DELETE", "OPTIONS"],
+                "allow_headers": ["Content-Type", "Authorization"],
+            }
+        },
+    )
+
+>>>>>>> main
     db.init_app(app)
     migrate.init_app(app, db)
     jwt.init_app(app)

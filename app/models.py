@@ -261,3 +261,31 @@ class BargainMessage(db.Model):
             "message": self.message,
             "created_at": self.created_at.isoformat()
         }
+
+
+class PendingCheckout(db.Model, TimestampMixin):
+    """
+    Temporary storage for checkout data before payment is confirmed.
+    Order is only created when M-Pesa callback confirms payment success.
+    This prevents zombie orders on timeout/failure.
+    """
+    __tablename__ = "pending_checkouts"
+
+    id = db.Column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)  # Same as temp_order_id
+    buyer_id = db.Column(UUID(as_uuid=True), db.ForeignKey("buyers.id"), nullable=False)
+    farmer_id = db.Column(UUID(as_uuid=True), db.ForeignKey("farmers.id"), nullable=False)
+    bargain_id = db.Column(db.Integer, db.ForeignKey("bargain_sessions.id"), nullable=True)
+    
+    items = db.Column(db.JSON, nullable=False)
+    total_amount = db.Column(db.Numeric(10, 2), nullable=False)
+    payment_method = db.Column(db.String(50), default="mpesa")
+    checkout_id = db.Column(db.String(100), nullable=True)  # M-Pesa CheckoutRequestID
+    
+    # Status: pending, paid, expired, cancelled
+    status = db.Column(db.String(20), default="pending")
+
+    buyer = db.relationship("Buyer", backref="pending_checkouts")
+    farmer = db.relationship("Farmer", backref="pending_checkouts")
+
+    def __repr__(self):
+        return f"<PendingCheckout {self.id} | Status: {self.status}>"
