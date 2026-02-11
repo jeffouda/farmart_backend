@@ -52,28 +52,43 @@ GRANT ALL PRIVILEGES ON DATABASE farmart_db TO farmart_user;
 ```
 
 #### Configure Environment Variables
-Create a `.env` file in the `Farmart_backend` directory:
 
+**IMPORTANT:** The `.env` file contains sensitive credentials and is **NOT tracked by git** (see `.gitignore`). You must create it manually.
+
+1. Copy the template to create your `.env` file:
+```bash
+cp .env.example .env
+```
+
+2. Edit `.env` and fill in your actual values:
 ```env
 # Database Configuration
 DATABASE_URL=postgresql://farmart_user:your_password_here@localhost:5432/farmart_db
 
-# JWT Configuration
+# JWT Configuration (change this in production!)
 JWT_SECRET_KEY=your-super-secret-jwt-key-change-in-production
 JWT_ACCESS_TOKEN_EXPIRES=3600
 
 # Flask Configuration
 FLASK_APP=app.py
 FLASK_ENV=development
-SECRET_KEY=your-flask-secret-key
 
-# Optional: Email Configuration
-MAIL_SERVER=smtp.gmail.com
-MAIL_PORT=587
-MAIL_USE_TLS=True
-MAIL_USERNAME=your-email@gmail.com
-MAIL_PASSWORD=your-app-password
+# Cloudinary Configuration (for image uploads)
+CLOUDINARY_CLOUD_NAME=your_cloud_name
+CLOUDINARY_API_KEY=your_api_key
+CLOUDINARY_API_SECRET=your_api_secret
+
+# M-Pesa Configuration (optional - for payments)
+MPESA_CONSUMER_KEY=your_consumer_key
+MPESA_CONSUMER_SECRET=your_consumer_secret
+MPESA_SHORTCODE=your_shortcode
+MPESA_PASSKEY=your_passkey
 ```
+
+**⚠️ KEEP YOUR .env FILE SAFE!**
+- Never commit `.env` to version control
+- Backup your credentials securely
+- When switching branches, your `.env` file will NOT be affected
 
 ### 4. Initialize Database
 

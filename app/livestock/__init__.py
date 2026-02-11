@@ -1,5 +1,5 @@
 from flask import Blueprint
 
-livestock_bp = Blueprint('livestock', __name__, url_prefix='/api/livestock')
+livestock_bp = Blueprint("livestock", __name__)
 
 from . import routes
