@@ -180,6 +180,17 @@ def get_farmer_reviews(farmer_id):
 user = User.query.filter_by(id=farmer_uuid, role="farmer").first()
     if not user:
         return jsonify({"message": "Farmer not found"}), 404
+    return jsonify({
+        "farmer": {
+            "id": str(user.id),
+            "full_name": user.full_name,
+            "average_rating": user.average_rating,
+            "review_count": user.review_count,
+        },
+        "reviews": [review.to_dict() for review in reviews],
+    }), 200
+
+
 
     reviews = (
         Review.query
