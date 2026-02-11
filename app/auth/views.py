@@ -105,9 +105,24 @@ def register():
     # Commit everything
     try:
         db.session.commit()
+        
+        # Create JWT token for auto-login after registration
+        access_token = create_access_token(
+            identity=str(new_user.id), 
+            additional_claims={"role": new_user.role}
+        )
+        
         return jsonify({
             "message": f"{role.capitalize()} registered successfully",
-            "user_id": str(new_user.id),
+            "access_token": access_token,
+            "user": {
+                "id": str(new_user.id),
+                "email": new_user.email,
+                "role": new_user.role,
+                "full_name": new_user.full_name,
+                "phone_number": new_user.phone_number,
+                "location": new_user.location,
+            },
         }), 201
     except Exception as e:
         db.session.rollback()

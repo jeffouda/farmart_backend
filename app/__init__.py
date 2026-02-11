@@ -20,37 +20,32 @@ def create_app(config_name="default"):
     app_config = config.get(config_name, config["default"])
     app.config.from_object(app_config)
 
-
     # Initialize extensions
-
-
-    # Initialize extensions
-    # Allow all origins for development (including ngrok)
-    CORS(
-        app,
-        resources={
-            r"/api/*": {
-                "origins": ["http://localhost:5173", "http://127.0.0.1:5173"],
-                "methods": ["GET", "POST", "PUT", "DELETE", "OPTIONS"],
-                "allow_headers": ["Content-Type", "Authorization", "ngrok-skip-browser-warning"],
-            }
-        },
-        supports_credentials=True  # CRITICAL: This allows the browser to accept the response
-    )
-
-
     db.init_app(app)
     migrate.init_app(app, db)
     jwt.init_app(app)
 
-    # Enable CORS **only for API routes** and allow necessary headers/methods
+    # Configure CORS - Single configuration for both dev and production
+    # Allow localhost for dev, and the Render frontend for production
     CORS(
         app,
-        resources={r"/api/*": {"origins": "http://localhost:5173"}},
-        supports_credentials=True,
-        expose_headers=["Content-Type", "Authorization"],
-        allow_headers=["Content-Type", "Authorization"],
-        methods=["GET", "POST", "PUT", "DELETE", "OPTIONS"],
+        resources={
+            r"/api/*": {
+                "origins": [
+                    "http://localhost:5173",
+                    "http://127.0.0.1:5173",
+                    "https://farmart-com.onrender.com"
+                ],
+                "methods": ["GET", "POST", "PUT", "DELETE", "OPTIONS"],
+                "allow_headers": [
+                    "Content-Type",
+                    "Authorization",
+                    "ngrok-skip-browser-warning"
+                ],
+                "supports_credentials": True,
+                "expose_headers": ["Content-Type", "Authorization"],
+            }
+        },
     )
 
     # Register blueprints

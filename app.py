@@ -1,21 +1,12 @@
 # app.py
 from app import create_app
-from flask_cors import CORS
 import os
 
 # app instance using the factory
 app = create_app()
 
-# Enable CORS
-CORS(
-    app,
-    origins=[
-        "http://localhost:5173",             # local dev
-        "https://farmart-com.onrender.com"  # live frontend
-    ],
-    supports_credentials=True,
-    allow_headers=["Content-Type", "Authorization", "ngrok-skip-browser-warning"]
-)
+# Note: CORS is now configured in the create_app() factory in app/__init__.py
+# Do not add additional CORS configuration here to avoid conflicts
 
 
 # Serve static files for uploaded images
