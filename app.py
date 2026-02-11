@@ -9,10 +9,14 @@ app = create_app()
 # Enable CORS
 CORS(
     app,
-    origins=["http://localhost:5173"],  # Change this to your frontend URL in prod
+    origins=[
+        "http://localhost:5173",             # local dev
+        "https://farmart-com.onrender.com"  # live frontend
+    ],
     supports_credentials=True,
     allow_headers=["Content-Type", "Authorization", "ngrok-skip-browser-warning"]
 )
+
 
 # Serve static files for uploaded images
 static_uploads = os.path.join(os.path.dirname(__file__), "app", "static", "uploads")
