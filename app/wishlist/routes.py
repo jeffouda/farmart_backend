@@ -83,7 +83,7 @@ def add_to_wishlist():
         db.session.add(wishlist_item)
         db.session.commit()
     except Exception as e:
-        #VERBOSE: Print full traceback to terminal
+        # VERBOSE: Print full traceback to terminal
         traceback.print_exc()
         db.session.rollback()
         return jsonify({"error": "Backend Crash", "details": str(e)}), 500

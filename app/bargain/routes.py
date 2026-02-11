@@ -8,6 +8,7 @@ from app.models import (
     Animal,
     BargainSession,
     BargainMessage,
+    create_notification,
 )
 from datetime import datetime, timedelta
 from . import bargain_bp
@@ -96,6 +97,23 @@ def create_session():
 
     try:
         db.session.commit()
+        
+        # Create notifications
+        try:
+            # Notify farmer of new negotiation
+            farmer = Farmer.query.get(animal.farmer_id)
+            if farmer:
+                create_notification(
+                    user_id=farmer.user_id,
+                    type='new_negotiation',
+                    title='New Negotiation Request',
+                    message=f'A buyer wants to negotiate for {animal.species} ({animal.breed or "Unknown breed"})',
+                    related_id=str(session.id),
+                    related_type='negotiation'
+                )
+        except Exception as notify_error:
+            print(f"Error creating notification: {notify_error}")
+        
         return jsonify({
             "message": "Bargain session created successfully",
             "session": session.to_dict(),
@@ -277,6 +295,47 @@ def counter_offer(session_id):
 
     try:
         db.session.commit()
+        
+        # Create notifications for counter offer
+        try:
+            animal = Animal.query.get(session.animal_id)
+            # Notify the other party
+            if buyer:
+                # Farmer made counter offer - notify buyer
+                farmer = Farmer.query.get(session.farmer_id)
+                if farmer:
+                    create_notification(
+                        user_id=farmer.user_id,
+                        type='negotiation_update',
+                        title='Negotiation Update',
+                        message=f'You sent a counter offer of KES {float(new_price):,.0f} for {animal.species if animal else "livestock"}',
+                        related_id=str(session.id),
+                        related_type='negotiation'
+                    )
+                    # Notify buyer
+                    create_notification(
+                        user_id=buyer.user_id,
+                        type='negotiation_update',
+                        title='Counter Offer Received',
+                        message=f'Farmer sent a counter offer of KES {float(new_price):,.0f} for {animal.species if animal else "livestock"}',
+                        related_id=str(session.id),
+                        related_type='negotiation'
+                    )
+            else:
+                # Buyer made counter offer - notify farmer
+                farmer_user = User.query.filter_by(id=session.farmer_id).first() if session.farmer_id else None
+                if farmer_user:
+                    create_notification(
+                        user_id=farmer_user.id,
+                        type='negotiation_update',
+                        title='Counter Offer Received',
+                        message=f'Buyer sent a counter offer of KES {float(new_price):,.0f}',
+                        related_id=str(session.id),
+                        related_type='negotiation'
+                    )
+        except Exception as notify_error:
+            print(f"Error creating notification: {notify_error}")
+        
         return jsonify({
             "message": "Counter offer submitted successfully",
             "session": session.to_dict(),
@@ -339,6 +398,38 @@ def accept_offer(session_id):
 
     try:
         db.session.commit()
+        
+        # Create notifications for accepted offer
+        try:
+            animal = Animal.query.get(session.animal_id)
+            # Notify both parties
+            if buyer:
+                # Notify farmer that buyer accepted
+                farmer = Farmer.query.get(session.farmer_id)
+                if farmer:
+                    create_notification(
+                        user_id=farmer.user_id,
+                        type='negotiation_update',
+                        title='Offer Accepted!',
+                        message=f'Buyer accepted the offer of KES {float(confirmed_price):,.0f} for {animal.species if animal else "livestock"}',
+                        related_id=str(session.id),
+                        related_type='negotiation'
+                    )
+            else:
+                # Notify buyer that farmer accepted
+                buyer_profile = Buyer.query.get(session.buyer_id)
+                if buyer_profile:
+                    create_notification(
+                        user_id=buyer_profile.user_id,
+                        type='negotiation_update',
+                        title='Offer Accepted!',
+                        message=f'Farmer accepted your offer of KES {float(confirmed_price):,.0f}. You can now proceed to payment.',
+                        related_id=str(session.id),
+                        related_type='negotiation'
+                    )
+        except Exception as notify_error:
+            print(f"Error creating notification: {notify_error}")
+        
         return jsonify({
             "message": "Offer accepted successfully",
             "status": "accepted",
@@ -393,6 +484,38 @@ def reject_offer(session_id):
 
     try:
         db.session.commit()
+        
+        # Create notifications for rejected offer
+        try:
+            animal = Animal.query.get(session.animal_id)
+            # Notify both parties
+            if buyer:
+                # Notify farmer that buyer rejected
+                farmer = Farmer.query.get(session.farmer_id)
+                if farmer:
+                    create_notification(
+                        user_id=farmer.user_id,
+                        type='negotiation_update',
+                        title='Offer Rejected',
+                        message=f'Buyer rejected the offer for {animal.species if animal else "livestock"}',
+                        related_id=str(session.id),
+                        related_type='negotiation'
+                    )
+            else:
+                # Notify buyer that farmer rejected
+                buyer_profile = Buyer.query.get(session.buyer_id)
+                if buyer_profile:
+                    create_notification(
+                        user_id=buyer_profile.user_id,
+                        type='negotiation_update',
+                        title='Offer Rejected',
+                        message=f'Farmer rejected your offer for {animal.species if animal else "livestock"}',
+                        related_id=str(session.id),
+                        related_type='negotiation'
+                    )
+        except Exception as notify_error:
+            print(f"Error creating notification: {notify_error}")
+        
         return jsonify({"message": "Offer rejected", "session": session.to_dict()}), 200
     except Exception as e:
         db.session.rollback()

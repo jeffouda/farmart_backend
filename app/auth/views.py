@@ -57,7 +57,7 @@ def register():
     # Create the Base User with profile data
     new_user = User(
         email=email,
-        role=role,
+        role=UserRole(role),
         full_name=full_name,
         phone_number=phone_number,
         location=location,
@@ -67,7 +67,7 @@ def register():
     db.session.add(new_user)
     db.session.flush()  # Generates the user_id for the next step
 
-    #  Create Profile based on Role
+    # Create Profile based on Role
     if role == "farmer":
         # Farmers require farm_name, location, and phone_number
         if not all([
@@ -102,7 +102,7 @@ def register():
         )
         db.session.add(new_profile)
 
-    # 4. Commit everything
+    # Commit everything
     try:
         db.session.commit()
         return jsonify({
@@ -196,13 +196,78 @@ def get_current_user():
     if not user:
         return jsonify({"error": "User not found"}), 404
 
-    # Return user data with profile info
-    return jsonify({
+    # Build response with user data
+    user_data = {
         "id": str(user.id),
         "email": user.email,
-        "role": user.role,
+        "role": user.role.value if hasattr(user.role, 'value') else str(user.role),
         "full_name": user.full_name,
         "phone_number": user.phone_number,
         "location": user.location,
         "created_at": user.created_at.isoformat() if user.created_at else None,
-    }), 200
+        "average_rating": user.average_rating,
+        "review_count": user.review_count,
+    }
+
+    # Add role-specific profile data
+    if user.role.value == "farmer" and user.farmer:
+        user_data["farm_name"] = user.farmer.farm_name
+        user_data["farm_location"] = user.farmer.location
+        user_data["farm_phone_number"] = user.farmer.phone_number
+        user_data["is_verified"] = user.farmer.is_verified
+        user_data["wallet_balance"] = float(user.farmer.wallet_balance) if user.farmer.wallet_balance else 0
+    elif user.role.value == "buyer" and user.buyer:
+        user_data["delivery_address"] = user.buyer.delivery_address
+        user_data["preferred_contact"] = user.buyer.preferred_contact
+
+    return jsonify(user_data), 200
+
+
+# UPDATE PROFILE ROUTE
+@auth_bp.route("/profile", methods=["PUT"])
+@jwt_required()
+def update_profile():
+    """Update current user's profile"""
+    user_id_str = get_jwt_identity()
+
+    try:
+        user_id_uuid = uuid.UUID(user_id_str)
+    except ValueError:
+        return jsonify({"error": "Invalid user ID format"}), 400
+
+    user = User.query.get(user_id_uuid)
+
+    if not user:
+        return jsonify({"error": "User not found"}), 404
+
+    data = request.get_json()
+
+    # Update basic user fields
+    if "full_name" in data:
+        user.full_name = data["full_name"]
+    if "phone_number" in data:
+        user.phone_number = data["phone_number"]
+    if "location" in data:
+        user.location = data["location"]
+
+    # Update role-specific fields
+    if user.role.value == "farmer" and user.farmer:
+        if "farm_name" in data:
+            user.farmer.farm_name = data["farm_name"]
+        if "farm_location" in data:
+            user.farmer.location = data["farm_location"]
+        # Note: phone_number should be updated on user level, not farmer level for uniqueness reasons
+    elif user.role.value == "buyer" and user.buyer:
+        if "delivery_address" in data:
+            user.buyer.delivery_address = data["delivery_address"]
+        if "preferred_contact" in data:
+            user.buyer.preferred_contact = data["preferred_contact"]
+
+    try:
+        db.session.commit()
+
+        # Return updated user data
+        return get_current_user()
+    except Exception as e:
+        db.session.rollback()
+        return jsonify({"error": str(e)}), 500

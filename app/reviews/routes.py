@@ -1,8 +1,8 @@
-from flask import jsonify, request
+from flask import jsonify, request, current_app
 from flask_jwt_extended import jwt_required, get_jwt_identity
 import uuid
-from app.models import Review, Order, Buyer, Farmer, User
-from app import db
+from app.models import Review, Order, Buyer, Farmer, User, EscrowRecord, db
+from app.services.mpesa_service import MpesaService
 from . import reviews_bp
 
 
@@ -15,19 +15,15 @@ def get_my_reviews():
     """
     current_user_id_str = get_jwt_identity()
 
-    # Convert string UUID to UUID object
     try:
         current_user_id = uuid.UUID(current_user_id_str)
     except ValueError:
         return jsonify({"error": "Invalid user ID format"}), 400
 
-    # Verify user is a farmer
     farmer = Farmer.query.filter_by(user_id=current_user_id).first()
-
     if not farmer:
         return jsonify({"message": "No farmer profile found for this user"}), 404
 
-    # Get all reviews for this farmer (target_id is the farmer's user_id)
     reviews = (
         Review.query
         .filter_by(target_id=current_user_id)
@@ -35,7 +31,6 @@ def get_my_reviews():
         .all()
     )
 
-    # Get user info for the farmer
     user = User.query.get(current_user_id)
 
     return jsonify({
@@ -53,20 +48,16 @@ def get_my_reviews():
 @jwt_required()
 def create_review():
     """
-    Create a review for a completed order.
-    Also updates the farmer's average rating.
+    Create a review and automatically release escrow funds if rating is >= 4.
     """
     current_user_id_str = get_jwt_identity()
 
-    # Convert string UUID to UUID object
     try:
         current_user_id = uuid.UUID(current_user_id_str)
     except ValueError:
         return jsonify({"error": "Invalid user ID format"}), 400
 
     data = request.get_json()
-
-    # Validate required fields
     if not data:
         return jsonify({"error": "No data provided"}), 400
 
@@ -78,34 +69,43 @@ def create_review():
     if not order_id:
         return jsonify({"error": "Order ID is required"}), 400
 
+    # Convert order_id to UUID
+    try:
+        order_uuid = uuid.UUID(order_id)
+    except ValueError:
+        return jsonify({"error": "Invalid order ID format"}), 400
+
     if not rating or not isinstance(rating, int) or rating < 1 or rating > 5:
         return jsonify({"error": "Rating must be an integer between 1 and 5"}), 400
 
-    # Find the buyer record for this user
     buyer = Buyer.query.filter_by(user_id=current_user_id).first()
-
     if not buyer:
         return jsonify({"message": "No buyer profile found for this user"}), 404
 
-    # Find order and verify ownership
-    order = Order.query.filter_by(id=order_id, buyer_id=buyer.id).first()
-
+    order = Order.query.filter_by(id=order_uuid, buyer_id=buyer.id).first()
     if not order:
         return jsonify({"message": "Order not found or access denied"}), 404
 
-    # Check if order is delivered
-    if order.status != "delivered":
+    if order.status not in ["delivered", "completed"]:
         return jsonify({
-            "message": f"Cannot review order. Order status is '{order.status}'. Order must be 'delivered' to leave a review."
+            "message": f"Order must be 'delivered' or 'completed' to leave a review. Current status: {order.status}"
         }), 400
 
-    # Check if review already exists (double-submit prevention)
     if order.has_review:
-        return jsonify({
-            "error": "Review already exists for this order. Duplicate reviews are not allowed."
-        }), 403
+        # Check if user wants to update existing review
+        existing_review = Review.query.filter_by(order_id=order.id, reviewer_id=current_user_id).first()
+        if existing_review:
+            # Update existing review
+            existing_review.rating = rating
+            existing_review.comment = comment
+            existing_review.tags = tags if isinstance(tags, list) else []
+            db.session.commit()
+            return jsonify({
+                "message": "Review updated successfully",
+                "review": existing_review.to_dict(),
+            }), 200
+        return jsonify({"error": "Review already exists for this order"}), 403
 
-    # Get the farmer's user_id for the target
     farmer = Farmer.query.get(order.farmer_id)
     if not farmer:
         return jsonify({"error": "Farmer not found for this order"}), 404
@@ -121,28 +121,66 @@ def create_review():
     )
 
     try:
+        current_app.logger.info(
+            f"Creating review for order {order.id}, rating={rating}"
+        )
+
         db.session.add(review)
-
-        # Mark order as reviewed
         order.has_review = True
-
-        # Update farmer's rating (atomic transaction)
         _update_farmer_rating(farmer.user_id)
+        current_app.logger.info(f"Review added and farmer rating updated")
+
+        # --- ESCROW AUTO-RELEASE LOGIC ---
+        payout_triggered = False
+        if rating >= 4:
+            escrow = EscrowRecord.query.filter_by(
+                order_id=order.id, status="held"
+            ).first()
+            current_app.logger.info(
+                f"Checking escrow for order {order.id}: escrow={escrow}"
+            )
+            if escrow:
+                current_app.logger.info(
+                    f"Found held escrow for order {order.id}, triggering B2C payout"
+                )
+                try:
+                    # Trigger M-Pesa B2C Payout
+                    payout_res = MpesaService.initiate_b2c(
+                        escrow.seller_phone, escrow.amount, order.id
+                    )
+
+                    if payout_res.get("ResponseCode") == "0":
+                        escrow.status = "releasing"
+                        escrow.b2c_conversation_id = payout_res.get("ConversationID")
+                        order.status = "completed"
+                        payout_triggered = True
+                        current_app.logger.info(
+                            f"Auto-payout triggered for Order {order.id} due to {rating}-star review."
+                        )
+                    else:
+                        current_app.logger.warning(
+                            f"M-Pesa B2C failed for Order {order.id}: {payout_res}"
+                        )
+                except Exception as mpesa_error:
+                    current_app.logger.error(f"M-Pesa B2C error: {str(mpesa_error)}")
+                    # Continue without failing the review
+                    payout_triggered = False
 
         db.session.commit()
 
         return jsonify({
             "message": "Review created successfully",
+            "payout_initiated": payout_triggered,
             "review": review.to_dict(),
             "farmer_new_average": float(farmer.user.average_rating)
             if farmer.user
             else 0,
-            "farmer_review_count": farmer.user.review_count if farmer.user else 1,
         }), 201
 
     except Exception as e:
         db.session.rollback()
-        return jsonify({"error": f"Failed to create review: {str(e)}"}), 500
+        current_app.logger.error(f"Review creation failed: {str(e)}")
+        return jsonify({"error": f"Failed to process review: {str(e)}"}), 500
 
 
 @reviews_bp.route("/farmer/<farmer_id>", methods=["GET"])
@@ -155,13 +193,10 @@ def get_farmer_reviews(farmer_id):
     except ValueError:
         return jsonify({"error": "Invalid farmer ID format"}), 400
 
-    # Find the farmer's user record
     user = User.query.filter_by(id=farmer_uuid, role="farmer").first()
-
     if not user:
         return jsonify({"message": "Farmer not found"}), 404
 
-    # Get all reviews for this farmer
     reviews = (
         Review.query
         .filter_by(target_id=farmer_uuid)
@@ -183,13 +218,11 @@ def get_farmer_reviews(farmer_id):
 def _update_farmer_rating(farmer_user_id):
     """
     Recalculate and update the farmer's average rating.
-    Called atomically when a new review is created.
     """
     user = User.query.get(farmer_user_id)
     if not user:
         return
 
-    # Get all reviews for this farmer
     reviews = Review.query.filter_by(target_id=farmer_user_id).all()
 
     if not reviews:
@@ -197,7 +230,6 @@ def _update_farmer_rating(farmer_user_id):
         user.review_count = 0
         return
 
-    # Calculate new average
     total_ratings = sum(r.rating for r in reviews)
     user.average_rating = total_ratings / len(reviews)
     user.review_count = len(reviews)
