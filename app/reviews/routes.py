@@ -81,6 +81,22 @@ def create_review():
         return jsonify({
             "message": f"Order must be 'delivered' or 'completed' to leave a review. Current status: {order.status}"
         }), 400
+    
+    if order.has_review:
+        # Check if user wants to update existing review
+        existing_review = Review.query.filter_by(order_id=order.id, reviewer_id=current_user_id).first()
+        if existing_review:
+            # Update existing review
+            existing_review.rating = rating
+            existing_review.comment = comment
+            existing_review.tags = tags if isinstance(tags, list) else []
+            db.session.commit()
+            return jsonify({
+                "message": "Review updated successfully",
+                "review": existing_review.to_dict(),
+            }), 200
+        return jsonify({"error": "Review already exists for this order"}), 403
+
 
 
 
