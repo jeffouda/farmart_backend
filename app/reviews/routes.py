@@ -21,4 +21,22 @@ def get_my_reviews():
     farmer = Farmer.query.filter_by(user_id=current_user_id).first()
     if not farmer:
         return jsonify({"message": "No farmer profile found for this user"}), 404
+     reviews = (
+        Review.query
+        .filter_by(target_id=current_user_id)
+        .order_by(Review.created_at.desc())
+        .all()
+    )
+
+    user = User.query.get(current_user_id)
+
+    return jsonify({
+        "farmer": {
+            "id": str(user.id),
+            "full_name": user.full_name,
+            "average_rating": user.average_rating,
+            "review_count": user.review_count,
+        },
+        "reviews": [review.to_dict() for review in reviews],
+    }), 200
 
