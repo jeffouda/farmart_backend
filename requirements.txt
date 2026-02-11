@@ -13,6 +13,7 @@ psycopg2-binary>=2.9.0
 SQLAlchemy>=2.0.0
 
 # Configuration
+gunicorn==21.2.0
 python-dotenv>=1.0.0
 
 # Authentication
