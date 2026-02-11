@@ -164,6 +164,12 @@ if payout_res.get("ResponseCode") == "0":
             else 0,
         }), 201
 
+except Exception as e:
+        db.session.rollback()
+        current_app.logger.error(f"Review creation failed: {str(e)}")
+        return jsonify({"error": f"Failed to process review: {str(e)}"}), 500
+
+
 
 
 
