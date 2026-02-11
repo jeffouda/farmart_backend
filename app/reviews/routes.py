@@ -96,6 +96,10 @@ def create_review():
                 "review": existing_review.to_dict(),
             }), 200
         return jsonify({"error": "Review already exists for this order"}), 403
+      farmer = Farmer.query.get(order.farmer_id)
+    if not farmer:
+        return jsonify({"error": "Farmer not found for this order"}), 404
+
 
 
 
