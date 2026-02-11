@@ -39,4 +39,16 @@ def get_my_reviews():
         },
         "reviews": [review.to_dict() for review in reviews],
     }), 200
+@reviews_bp.route("/", methods=["POST"])
+@jwt_required()
+def create_review():
+    """
+    Create a review and automatically release escrow funds if rating is >= 4.
+    """
+    current_user_id_str = get_jwt_identity()
+
+    try:
+        current_user_id = uuid.UUID(current_user_id_str)
+    except ValueError:
+        return jsonify({"error": "Invalid user ID format"}), 400
 
