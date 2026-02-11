@@ -54,5 +54,13 @@ def create_review():
      data = request.get_json()
     if not data:
         return jsonify({"error": "No data provided"}), 400
+    order_id = data.get("orderId") or data.get("order_id")
+    rating = data.get("rating")
+    comment = data.get("feedback") or data.get("comment")
+    tags = data.get("tags", [])
+
+    if not order_id:
+        return jsonify({"error": "Order ID is required"}), 400
+
 
 
