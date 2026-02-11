@@ -323,6 +323,7 @@ def get_my_inventory():
     return jsonify({"animals": [a.to_dict() for a in animals]}), 200
 
 
+@livestock_bp.route("", methods=["GET"])
 @livestock_bp.route("/all", methods=["GET"])
 def get_all_livestock():
     """

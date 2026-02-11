@@ -22,6 +22,9 @@ def create_app(config_name="default"):
 
 
     # Initialize extensions
+
+
+    # Initialize extensions
     # Allow all origins for development (including ngrok)
     CORS(
         app,
@@ -35,9 +38,20 @@ def create_app(config_name="default"):
         supports_credentials=True  # CRITICAL: This allows the browser to accept the response
     )
 
+
     db.init_app(app)
     migrate.init_app(app, db)
     jwt.init_app(app)
+
+    # Enable CORS **only for API routes** and allow necessary headers/methods
+    CORS(
+        app,
+        resources={r"/api/*": {"origins": "http://localhost:5173"}},
+        supports_credentials=True,
+        expose_headers=["Content-Type", "Authorization"],
+        allow_headers=["Content-Type", "Authorization"],
+        methods=["GET", "POST", "PUT", "DELETE", "OPTIONS"],
+    )
 
     # Register blueprints
     from app.auth import auth_bp
@@ -85,6 +99,8 @@ def create_app(config_name="default"):
     def health_check():
         return jsonify({"status": "online", "message": "System is healthy"}), 200
 
+
+
     # Root endpoint - API info
     @app.route("/", methods=["GET"])
     def root():
@@ -106,5 +122,6 @@ def create_app(config_name="default"):
                 "payments": "/api/payments/",
             },
         }), 200
+
 
     return app

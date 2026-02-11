@@ -20,35 +20,41 @@ from app import create_app
 from app.models import db, User, Farmer, Animal, Buyer, UserRole
 import uuid
 
-
 def reset_database():
     """Nuclear reset of the database."""
 
     print("🚀 Starting Database Nuclear Reset...")
 
-    # Create app with test config
+    # Create app with development config
     app = create_app("development")
 
+    # OVERRIDE: Manually setting the URI with the encoded password 'H@40960.ness'
+    # We use %40 because @ is a reserved character in URLs.
+    app.config['SQLALCHEMY_DATABASE_URI'] = 'postgresql://postgres:Happyness@localhost:5432/farmart_db'
+
     with app.app_context():
-        # Step 1: Drop all tables
-        print("💥 Dropping all tables...")
-        db.drop_all()
-        print("✅ All tables dropped.")
+        try:
+            # Step 1: Drop all tables
+            print("💥 Dropping all tables...")
+            db.drop_all()
+            print("✅ All tables dropped.")
 
-        # Step 2: Recreate all tables
-        print("🔨 Recreating tables from models.py...")
-        db.create_all()
-        print("✅ All tables created with Integer PKs.")
+            # Step 2: Recreate all tables
+            print("🔨 Recreating tables from models.py...")
+            db.create_all()
+            print("✅ All tables created with Integer PKs.")
 
-        # Step 3: Seed test data
-        print("🌱 Seeding test data...")
-        seed_test_data()
+            # Step 3: Seed test data
+            print("🌱 Seeding test data...")
+            seed_test_data()
 
-        print("\n✨ Database wiped and rebuilt successfully!")
-        print("\nTest credentials:")
-        print("  Email: test@farmart.com")
-        print("  Password: testpass123")
-
+            print("\n✨ Database wiped and rebuilt successfully!")
+            print("\nTest credentials:")
+            print("  Email: test@farmart.com")
+            print("  Password: testpass123")
+            
+        except Exception as e:
+            print(f"\n❌ Error during reset: {e}")
 
 def seed_test_data():
     """Seed the database with test data."""
@@ -127,18 +133,8 @@ def seed_test_data():
             price=32000,
             status="available",
             image_url="https://images.unsplash.com/photo-1484557985045-edf25e08da73?auto=format&fit=crop&q=80",
+
         ),
     ]
-
-    for animal in animals:
-        db.session.add(animal)
-
+    db.session.add_all(animals)
     db.session.commit()
-
-    print(f"✅ Seeded {len(animals)} test animals")
-    print(f"✅ Test user: test@farmart.com (buyer)")
-    print(f"✅ Test farmer: farmer@farmart.com")
-
-
-if __name__ == "__main__":
-    reset_database()
