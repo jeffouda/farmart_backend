@@ -4,6 +4,8 @@ import uuid
 from app.models import Review, Order, Buyer, Farmer, User, EscrowRecord, db
 from app.services.mpesa_service import MpesaService
 from . import reviews_bp
+
+
 @reviews_bp.route("/", methods=["GET"])
 @jwt_required()
 def get_my_reviews():
@@ -21,7 +23,8 @@ def get_my_reviews():
     farmer = Farmer.query.filter_by(user_id=current_user_id).first()
     if not farmer:
         return jsonify({"message": "No farmer profile found for this user"}), 404
-     reviews = (
+
+    reviews = (
         Review.query
         .filter_by(target_id=current_user_id)
         .order_by(Review.created_at.desc())
@@ -39,6 +42,8 @@ def get_my_reviews():
         },
         "reviews": [review.to_dict() for review in reviews],
     }), 200
+
+
 @reviews_bp.route("/", methods=["POST"])
 @jwt_required()
 def create_review():
@@ -51,9 +56,11 @@ def create_review():
         current_user_id = uuid.UUID(current_user_id_str)
     except ValueError:
         return jsonify({"error": "Invalid user ID format"}), 400
-     data = request.get_json()
+
+    data = request.get_json()
     if not data:
         return jsonify({"error": "No data provided"}), 400
+
     order_id = data.get("orderId") or data.get("order_id")
     rating = data.get("rating")
     comment = data.get("feedback") or data.get("comment")
@@ -61,6 +68,7 @@ def create_review():
 
     if not order_id:
         return jsonify({"error": "Order ID is required"}), 400
+
     # Convert order_id to UUID
     try:
         order_uuid = uuid.UUID(order_id)
@@ -69,7 +77,8 @@ def create_review():
 
     if not rating or not isinstance(rating, int) or rating < 1 or rating > 5:
         return jsonify({"error": "Rating must be an integer between 1 and 5"}), 400
-     buyer = Buyer.query.filter_by(user_id=current_user_id).first()
+
+    buyer = Buyer.query.filter_by(user_id=current_user_id).first()
     if not buyer:
         return jsonify({"message": "No buyer profile found for this user"}), 404
 
@@ -81,7 +90,7 @@ def create_review():
         return jsonify({
             "message": f"Order must be 'delivered' or 'completed' to leave a review. Current status: {order.status}"
         }), 400
-    
+
     if order.has_review:
         # Check if user wants to update existing review
         existing_review = Review.query.filter_by(order_id=order.id, reviewer_id=current_user_id).first()
@@ -96,10 +105,12 @@ def create_review():
                 "review": existing_review.to_dict(),
             }), 200
         return jsonify({"error": "Review already exists for this order"}), 403
-      farmer = Farmer.query.get(order.farmer_id)
+
+    farmer = Farmer.query.get(order.farmer_id)
     if not farmer:
         return jsonify({"error": "Farmer not found for this order"}), 404
-      # Create the review
+
+    # Create the review
     review = Review(
         order_id=order.id,
         reviewer_id=current_user_id,
@@ -108,7 +119,8 @@ def create_review():
         comment=comment,
         tags=tags if isinstance(tags, list) else [],
     )
- try:
+
+    try:
         current_app.logger.info(
             f"Creating review for order {order.id}, rating={rating}"
         )
@@ -117,7 +129,8 @@ def create_review():
         order.has_review = True
         _update_farmer_rating(farmer.user_id)
         current_app.logger.info(f"Review added and farmer rating updated")
-          # --- ESCROW AUTO-RELEASE LOGIC ---
+
+        # --- ESCROW AUTO-RELEASE LOGIC ---
         payout_triggered = False
         if rating >= 4:
             escrow = EscrowRecord.query.filter_by(
@@ -134,7 +147,9 @@ def create_review():
                     # Trigger M-Pesa B2C Payout
                     payout_res = MpesaService.initiate_b2c(
                         escrow.seller_phone, escrow.amount, order.id
-if payout_res.get("ResponseCode") == "0":
+                    )
+
+                    if payout_res.get("ResponseCode") == "0":
                         escrow.status = "releasing"
                         escrow.b2c_conversation_id = payout_res.get("ConversationID")
                         order.status = "completed"
@@ -151,9 +166,7 @@ if payout_res.get("ResponseCode") == "0":
                     # Continue without failing the review
                     payout_triggered = False
 
-                        
-                    )
-                    db.session.commit()
+        db.session.commit()
 
         return jsonify({
             "message": "Review created successfully",
@@ -164,10 +177,12 @@ if payout_res.get("ResponseCode") == "0":
             else 0,
         }), 201
 
-except Exception as e:
+    except Exception as e:
         db.session.rollback()
         current_app.logger.error(f"Review creation failed: {str(e)}")
         return jsonify({"error": f"Failed to process review: {str(e)}"}), 500
+
+
 @reviews_bp.route("/farmer/<farmer_id>", methods=["GET"])
 def get_farmer_reviews(farmer_id):
     """
@@ -177,9 +192,18 @@ def get_farmer_reviews(farmer_id):
         farmer_uuid = uuid.UUID(farmer_id)
     except ValueError:
         return jsonify({"error": "Invalid farmer ID format"}), 400
-user = User.query.filter_by(id=farmer_uuid, role="farmer").first()
+
+    user = User.query.filter_by(id=farmer_uuid, role="farmer").first()
     if not user:
         return jsonify({"message": "Farmer not found"}), 404
+
+    reviews = (
+        Review.query
+        .filter_by(target_id=farmer_uuid)
+        .order_by(Review.created_at.desc())
+        .all()
+    )
+
     return jsonify({
         "farmer": {
             "id": str(user.id),
@@ -189,6 +213,7 @@ user = User.query.filter_by(id=farmer_uuid, role="farmer").first()
         },
         "reviews": [review.to_dict() for review in reviews],
     }), 200
+
 
 def _update_farmer_rating(farmer_user_id):
     """
@@ -208,21 +233,3 @@ def _update_farmer_rating(farmer_user_id):
     total_ratings = sum(r.rating for r in reviews)
     user.average_rating = total_ratings / len(reviews)
     user.review_count = len(reviews)
-
-    reviews = (
-        Review.query
-        .filter_by(target_id=farmer_uuid)
-        .order_by(Review.created_at.desc())
-        .all()
-    )
-
-
-
-
-
-
-
-
-
-
-
