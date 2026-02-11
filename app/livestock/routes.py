@@ -10,6 +10,28 @@ import cloudinary.uploader
 from werkzeug.utils import secure_filename
 from datetime import datetime
 
+
+def save_local_image(image_file):
+    """Save image to local storage and return URL."""
+    # Create upload directory if it doesn't exist
+    upload_dir = os.path.join(
+        os.path.dirname(os.path.dirname(__file__)), "static", "uploads"
+    )
+    os.makedirs(upload_dir, exist_ok=True)
+
+    # Generate secure filename with timestamp
+    filename = secure_filename(
+        f"{datetime.now().strftime('%Y%m%d_%H%M%S')}_{image_file.filename}"
+    )
+    file_path = os.path.join(upload_dir, filename)
+    image_file.save(file_path)
+
+    # Store relative URL
+    image_url = f"/static/uploads/{filename}"
+    print(f"✅ Image saved locally: {image_url}")
+    return image_url
+
+
 # Configure Cloudinary at module level
 cloudinary.config(
     cloud_name=os.getenv("CLOUDINARY_CLOUD_NAME"),
@@ -17,6 +39,23 @@ cloudinary.config(
     api_secret=os.getenv("CLOUDINARY_API_SECRET"),
     secure=True,
 )
+
+
+def get_animal_by_id(animal_id):
+    """
+    Helper function to find animal by ID (handles UUID and string IDs).
+    """
+    # Try to parse as UUID first
+    try:
+        uuid_id = uuid.UUID(animal_id)
+        animal = Animal.query.filter_by(id=uuid_id).first()
+        if animal:
+            return animal
+    except ValueError:
+        pass
+
+    # Try direct lookup as last resort
+    return Animal.query.filter_by(id=animal_id).first()
 
 
 @livestock_bp.route("/stats", methods=["GET"])
@@ -47,19 +86,14 @@ def get_inventory_stats():
 
     # Get counts by status
     available_count = Animal.query.filter_by(
-        farmer_id=farmer.id, 
-        status="available"
+        farmer_id=farmer.id, status="available"
     ).count()
 
     pending_count = Animal.query.filter_by(
-        farmer_id=farmer.id, 
-        status="pending"
+        farmer_id=farmer.id, status="pending"
     ).count()
 
-    sold_count = Animal.query.filter_by(
-        farmer_id=farmer.id, 
-        status="sold"
-    ).count()
+    sold_count = Animal.query.filter_by(farmer_id=farmer.id, status="sold").count()
 
     total_count = Animal.query.filter_by(farmer_id=farmer.id).count()
 
@@ -122,17 +156,36 @@ def create_animal():
     if "image" in request.files:
         image_file = request.files["image"]
         if image_file and image_file.filename:
-            # Create upload directory if it doesn't exist
-            upload_dir = os.path.join(os.path.dirname(os.path.dirname(__file__)), "static", "uploads")
-            os.makedirs(upload_dir, exist_ok=True)
+            # Check if Cloudinary is configured
+            cloud_name = os.getenv("CLOUDINARY_CLOUD_NAME")
+            api_key = os.getenv("CLOUDINARY_API_KEY")
+            api_secret = os.getenv("CLOUDINARY_API_SECRET")
 
-            # Generate secure filename with timestamp
-            filename = secure_filename(f"{datetime.now().strftime('%Y%m%d_%H%M%S')}_{image_file.filename}")
-            file_path = os.path.join(upload_dir, filename)
-            image_file.save(file_path)
+            print(
+                f"🔍 Cloudinary config check: name={cloud_name}, key={api_key[:10] if api_key else 'None'}..."
+            )
 
-            # Store relative URL
-            image_url = f"/static/uploads/{filename}"
+            if (
+                cloud_name
+                and api_key
+                and api_secret
+                and cloud_name != "your_cloud_name"
+            ):
+                # Upload to Cloudinary
+                try:
+                    upload_result = cloudinary.uploader.upload(
+                        image_file, folder="farmart_livestock", resource_type="image"
+                    )
+                    image_url = upload_result.get("secure_url")
+                    print(f"✅ Image uploaded to Cloudinary: {image_url}")
+                except Exception as cloud_error:
+                    print(f"❌ Cloudinary upload failed: {cloud_error}")
+                    # Fallback to local storage
+                    image_url = save_local_image(image_file)
+            else:
+                print("⚠️ Cloudinary not configured, using local storage")
+                # Use local storage
+                image_url = save_local_image(image_file)
 
     # Create new animal
     animal = Animal(
@@ -254,70 +307,226 @@ def get_all_livestock():
     - Case-insensitive filter for status='available'
     - Returns items even without images
     - Sorts by created_at descending (newest first)
+    - Handles both Cloudinary URLs and local image filenames
     """
-    animals = (
-        Animal.query
-        .filter(Animal.status.ilike("available"))
-        .order_by(Animal.created_at.desc())
-        .all()
-    )
+    try:
+        animals = (
+            Animal.query
+            .filter(Animal.status.ilike("available"))
+            .order_by(Animal.created_at.desc())
+            .all()
+        )
 
-    return jsonify({
-        "animals": [a.to_dict() for a in animals],
-        "count": len(animals),
-    }), 200
+        # Helper function to process image URL
+        def process_image_url(image_url):
+            """Handle both Cloudinary (full URLs) and local legacy filenames."""
+            if not image_url:
+                return "https://placehold.co/600x400?text=No+Image"
+            if image_url.startswith("http"):
+                # It's a Cloudinary or external URL, leave it as-is
+                return image_url
+            # It's a local legacy file, construct full path
+            return f"{request.host_url}static/uploads/{image_url}"
+
+        # Build response with robust image handling
+        animals_list = []
+        for animal in animals:
+            animal_dict = {
+                "id": str(animal.id),
+                "species": animal.species,
+                "breed": animal.breed,
+                "age": animal.age,
+                "weight": animal.weight,
+                "price": float(animal.price) if animal.price else 0,
+                "status": animal.status,
+                "gender": animal.gender,
+                "health_history": animal.health_history,
+                "image_url": process_image_url(animal.image_url),
+                "farmer_id": str(animal.farmer_id),
+                "created_at": animal.created_at.isoformat()
+                if animal.created_at
+                else None,
+            }
+            # Get farmer info if available
+            if animal.owner:
+                animal_dict["farmer_name"] = animal.owner.farm_name
+                animal_dict["location"] = animal.owner.location
+            animals_list.append(animal_dict)
+
+        return jsonify({
+            "animals": animals_list,
+            "count": len(animals_list),
+        }), 200
+
+    except Exception as e:
+        print(f"❌ CRITICAL ERROR in GET /livestock/all: {str(e)}")
+        return jsonify({"error": "Internal Server Error", "details": str(e)}), 500
 
 
-@livestock_bp.route("/<int:animal_id>", methods=["GET"])
+@livestock_bp.route("/", methods=["GET"])
+def get_livestock():
+    """
+    Get livestock with query parameter filtering.
+    Supports: search, species, min_price, max_price, location, sort
+    """
+    try:
+        # Get query parameters
+        search = request.args.get("search", "")
+        species = request.args.get("species", "")
+        min_price = request.args.get("min_price")
+        max_price = request.args.get("max_price")
+        location = request.args.get("location", "")
+        sort = request.args.get("sort", "newest")
+
+        # Build query
+        query = Animal.query.filter(Animal.status.ilike("available"))
+
+        # Search filter
+        if search:
+            search_term = f"%{search}%"
+            query = query.filter(
+                db.or_(
+                    Animal.species.ilike(search_term),
+                    Animal.breed.ilike(search_term),
+                )
+            )
+
+        # Species filter (comma-separated)
+        if species:
+            species_list = [s.strip() for s in species.split(",")]
+            query = query.filter(Animal.species.in_(species_list))
+
+        # Price range filters
+        if min_price:
+            query = query.filter(Animal.price >= float(min_price))
+        if max_price:
+            query = query.filter(Animal.price <= float(max_price))
+
+        # Location filter (requires join with Farmer)
+        if location:
+            # Use correlated subquery for location filter
+            from sqlalchemy.sql import exists
+
+            location_filter = exists().where(
+                db.and_(
+                    Farmer.id == Animal.farmer_id,
+                    Farmer.location.ilike(f"%{location}%"),
+                )
+            )
+            query = query.filter(location_filter)
+
+        # Sorting
+        if sort == "price_low":
+            query = query.order_by(Animal.price.asc())
+        elif sort == "price_high":
+            query = query.order_by(Animal.price.desc())
+        else:  # newest
+            query = query.order_by(Animal.created_at.desc())
+
+        animals = query.all()
+
+        # Helper function to process image URL
+        def process_image_url(image_url):
+            """Handle both Cloudinary (full URLs) and local legacy filenames."""
+            if not image_url:
+                return "https://placehold.co/600x400?text=No+Image"
+            if image_url.startswith("http"):
+                # It's a Cloudinary or external URL, leave it as-is
+                return image_url
+            # It's a local legacy file, construct full path
+            return f"{request.host_url}static/uploads/{image_url}"
+
+        # Build response with robust image handling
+        animals_list = []
+        for animal in animals:
+            animal_dict = {
+                "id": str(animal.id),
+                "species": animal.species,
+                "breed": animal.breed,
+                "age": animal.age,
+                "weight": animal.weight,
+                "price": float(animal.price) if animal.price else 0,
+                "status": animal.status,
+                "gender": animal.gender,
+                "health_history": animal.health_history,
+                "image_url": process_image_url(animal.image_url),
+                "farmer_id": str(animal.farmer_id),
+                "created_at": animal.created_at.isoformat()
+                if animal.created_at
+                else None,
+            }
+            # Get farmer info if available
+            if animal.owner:
+                animal_dict["farmer_name"] = animal.owner.farm_name
+                animal_dict["location"] = animal.owner.location
+            animals_list.append(animal_dict)
+
+        return jsonify({
+            "animals": animals_list,
+            "count": len(animals_list),
+        }), 200
+
+    except Exception as e:
+        print(f"❌ CRITICAL ERROR in GET /livestock: {str(e)}")
+        return jsonify({"error": "Internal Server Error", "details": str(e)}), 500
+
+
+@livestock_bp.route("/<string:animal_id>", methods=["GET"])
 def get_animal(animal_id):
     """
-    Get a single animal by ID.
+    Get a single animal by ID (supports UUID and string IDs).
     Returns animal details including farmer information.
     """
-    animal = Animal.query.get(animal_id)
+    try:
+        animal = get_animal_by_id(animal_id)
 
-    if not animal:
-        return jsonify({"error": "Animal not found"}), 404
+        if not animal:
+            return jsonify({"error": "Animal not found"}), 404
 
-    # Get farmer details
-    farmer = Farmer.query.get(animal.farmer_id)
-    farmer_data = None
+        # Get farmer details
+        farmer = Farmer.query.get(animal.farmer_id)
+        farmer_data = None
 
-    if farmer:
-        user = User.query.get(farmer.user_id)
-        farmer_data = {
-            "id": farmer.id,
-            "name": user.full_name if user else "Unknown Farmer",
-            "rating": user.average_rating
-            if user and hasattr(user, "average_rating")
-            else 0,
-            "verified": farmer.is_verified or False,
-            "avatar": (user.full_name[:2] if user else "U").upper() if user else "U",
-            "phone": farmer.phone_number or None,
-        }
-
-    # Build response matching frontend expectations
-    response_data = animal.to_dict()
-    response_data.update({
-        "farmer_id": animal.farmer_id,
-        "farmer_name": farmer_data["name"] if farmer_data else "Unknown",
-        "farmer": farmer_data,
-        # Ensure image is available
-        "image": animal.image_url or animal.image or None,
-        "images": [
-            {
-                "url": animal.image_url
-                or animal.image
-                or "https://placehold.co/600x400?text=No+Image",
-                "alt": f"{animal.species} - {animal.breed}",
+        if farmer:
+            user = User.query.get(farmer.user_id)
+            farmer_data = {
+                "id": farmer.id,
+                "name": user.full_name if user else "Unknown Farmer",
+                "rating": user.average_rating
+                if user and hasattr(user, "average_rating")
+                else 0,
+                "verified": farmer.is_verified or False,
+                "avatar": (user.full_name[:2] if user else "U").upper()
+                if user
+                else "U",
+                "phone": farmer.phone_number or None,
             }
-        ],
-    })
 
-    return jsonify(response_data), 200
+        # Build response matching frontend expectations
+        response_data = animal.to_dict()
+        response_data.update({
+            "farmer_id": str(animal.farmer_id),
+            "farmer_name": farmer_data["name"] if farmer_data else "Unknown",
+            "farmer": farmer_data,
+            # Ensure image is available
+            "image": animal.image_url or None,
+            "images": [
+                {
+                    "url": animal.image_url
+                    or "https://placehold.co/600x400?text=No+Image",
+                    "alt": f"{animal.species} - {animal.breed}",
+                }
+            ],
+        })
+
+        return jsonify(response_data), 200
+
+    except Exception as e:
+        print(f"❌ ERROR in get_animal: {str(e)}")
+        return jsonify({"error": "Internal server error", "details": str(e)}), 500
 
 
-@livestock_bp.route("/<int:animal_id>", methods=["PUT"])
+@livestock_bp.route("/<string:animal_id>", methods=["PUT"])
 @jwt_required()
 def update_animal(animal_id):
     """
@@ -339,9 +548,13 @@ def update_animal(animal_id):
     if not farmer:
         return jsonify({"error": "Farmer profile not found"}), 404
 
-    animal = Animal.query.filter_by(id=animal_id, farmer_id=farmer.id).first()
+    animal = get_animal_by_id(animal_id)
     if not animal:
         return jsonify({"error": "Animal not found or access denied"}), 404
+
+    # Verify ownership
+    if animal.farmer_id != farmer.id:
+        return jsonify({"error": "Not authorized to update this animal"}), 403
 
     data = request.get_json()
 
@@ -361,7 +574,7 @@ def update_animal(animal_id):
     }), 200
 
 
-@livestock_bp.route("/<int:animal_id>", methods=["DELETE"])
+@livestock_bp.route("/<string:animal_id>", methods=["DELETE"])
 @jwt_required()
 def delete_animal(animal_id):
     """
@@ -383,9 +596,13 @@ def delete_animal(animal_id):
     if not farmer:
         return jsonify({"error": "Farmer profile not found"}), 404
 
-    animal = Animal.query.filter_by(id=animal_id, farmer_id=farmer.id).first()
+    animal = get_animal_by_id(animal_id)
     if not animal:
         return jsonify({"error": "Animal not found or access denied"}), 404
+
+    # Verify ownership
+    if animal.farmer_id != farmer.id:
+        return jsonify({"error": "Not authorized to delete this animal"}), 403
 
     db.session.delete(animal)
     db.session.commit()

@@ -10,7 +10,8 @@ class Config:
     # Database configuration
     DATABASE_URL = os.environ.get("DATABASE_URL")
     if not DATABASE_URL:
-        raise ValueError("DATABASE_URL environment variable is not set")
+        # Use SQLite for development if DATABASE_URL is not set
+        DATABASE_URL = "sqlite:///farmart.db"
 
     # JWT configuration
     JWT_SECRET_KEY = os.environ.get("JWT_SECRET_KEY", "dev-secret-key")

@@ -69,6 +69,12 @@ def create_review():
     if not order_id:
         return jsonify({"error": "Order ID is required"}), 400
 
+    # Convert order_id to UUID
+    try:
+        order_uuid = uuid.UUID(order_id)
+    except ValueError:
+        return jsonify({"error": "Invalid order ID format"}), 400
+
     if not rating or not isinstance(rating, int) or rating < 1 or rating > 5:
         return jsonify({"error": "Rating must be an integer between 1 and 5"}), 400
 
@@ -76,16 +82,28 @@ def create_review():
     if not buyer:
         return jsonify({"message": "No buyer profile found for this user"}), 404
 
-    order = Order.query.filter_by(id=order_id, buyer_id=buyer.id).first()
+    order = Order.query.filter_by(id=order_uuid, buyer_id=buyer.id).first()
     if not order:
         return jsonify({"message": "Order not found or access denied"}), 404
 
-    if order.status != "delivered":
+    if order.status not in ["delivered", "completed"]:
         return jsonify({
-            "message": f"Order must be 'delivered' to leave a review. Current status: {order.status}"
+            "message": f"Order must be 'delivered' or 'completed' to leave a review. Current status: {order.status}"
         }), 400
 
     if order.has_review:
+        # Check if user wants to update existing review
+        existing_review = Review.query.filter_by(order_id=order.id, reviewer_id=current_user_id).first()
+        if existing_review:
+            # Update existing review
+            existing_review.rating = rating
+            existing_review.comment = comment
+            existing_review.tags = tags if isinstance(tags, list) else []
+            db.session.commit()
+            return jsonify({
+                "message": "Review updated successfully",
+                "review": existing_review.to_dict(),
+            }), 200
         return jsonify({"error": "Review already exists for this order"}), 403
 
     farmer = Farmer.query.get(order.farmer_id)
@@ -103,24 +121,50 @@ def create_review():
     )
 
     try:
+        current_app.logger.info(
+            f"Creating review for order {order.id}, rating={rating}"
+        )
+
         db.session.add(review)
         order.has_review = True
         _update_farmer_rating(farmer.user_id)
+        current_app.logger.info(f"Review added and farmer rating updated")
 
         # --- ESCROW AUTO-RELEASE LOGIC ---
         payout_triggered = False
         if rating >= 4:
-            escrow = EscrowRecord.query.filter_by(order_id=order.id, status="held").first()
+            escrow = EscrowRecord.query.filter_by(
+                order_id=order.id, status="held"
+            ).first()
+            current_app.logger.info(
+                f"Checking escrow for order {order.id}: escrow={escrow}"
+            )
             if escrow:
-                # Trigger M-Pesa B2C Payout
-                payout_res = MpesaService.initiate_b2c(escrow.seller_phone, escrow.amount, order.id)
-                
-                if payout_res.get('ResponseCode') == '0':
-                    escrow.status = "releasing"
-                    escrow.b2c_conversation_id = payout_res.get('ConversationID')
-                    order.status = "completed"
-                    payout_triggered = True
-                    current_app.logger.info(f"Auto-payout triggered for Order {order.id} due to {rating}-star review.")
+                current_app.logger.info(
+                    f"Found held escrow for order {order.id}, triggering B2C payout"
+                )
+                try:
+                    # Trigger M-Pesa B2C Payout
+                    payout_res = MpesaService.initiate_b2c(
+                        escrow.seller_phone, escrow.amount, order.id
+                    )
+
+                    if payout_res.get("ResponseCode") == "0":
+                        escrow.status = "releasing"
+                        escrow.b2c_conversation_id = payout_res.get("ConversationID")
+                        order.status = "completed"
+                        payout_triggered = True
+                        current_app.logger.info(
+                            f"Auto-payout triggered for Order {order.id} due to {rating}-star review."
+                        )
+                    else:
+                        current_app.logger.warning(
+                            f"M-Pesa B2C failed for Order {order.id}: {payout_res}"
+                        )
+                except Exception as mpesa_error:
+                    current_app.logger.error(f"M-Pesa B2C error: {str(mpesa_error)}")
+                    # Continue without failing the review
+                    payout_triggered = False
 
         db.session.commit()
 
@@ -128,7 +172,9 @@ def create_review():
             "message": "Review created successfully",
             "payout_initiated": payout_triggered,
             "review": review.to_dict(),
-            "farmer_new_average": float(farmer.user.average_rating) if farmer.user else 0,
+            "farmer_new_average": float(farmer.user.average_rating)
+            if farmer.user
+            else 0,
         }), 201
 
     except Exception as e:

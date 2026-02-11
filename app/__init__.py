@@ -26,23 +26,16 @@ def create_app(config_name="default"):
 
     # Initialize extensions
     # Allow all origins for development (including ngrok)
-    CORS(app, resources={
-        r"/api/*": {
-            "origins": ["http://localhost:5173", "http://127.0.0.1:5173", 
-                       "*"]  # Allow all for development including ngrok
-        }
-    })
-
-    # Initialize extensions with CORS configuration
     CORS(
         app,
         resources={
             r"/api/*": {
                 "origins": ["http://localhost:5173", "http://127.0.0.1:5173"],
                 "methods": ["GET", "POST", "PUT", "DELETE", "OPTIONS"],
-                "allow_headers": ["Content-Type", "Authorization"],
+                "allow_headers": ["Content-Type", "Authorization", "ngrok-skip-browser-warning"],
             }
         },
+        supports_credentials=True  # CRITICAL: This allows the browser to accept the response
     )
 
 
@@ -71,17 +64,19 @@ def create_app(config_name="default"):
     from app.analytics import analytics_bp
     from app.negotiation import negotiation_bp
     from app.payments import payment_bp
+    from app.notifications import notifications_bp
 
-    app.register_blueprint(auth_bp, url_prefix='/api/auth')
-    app.register_blueprint(orders_bp, url_prefix='/api/orders')
-    app.register_blueprint(wishlist_bp, url_prefix='/api/wishlist')
-    app.register_blueprint(bargain_bp, url_prefix='/api/bargain')
-    app.register_blueprint(livestock_bp, url_prefix='/api/livestock')
-    app.register_blueprint(disputes_bp, url_prefix='/api/disputes')
-    app.register_blueprint(reviews_bp, url_prefix='/api/reviews')
-    app.register_blueprint(analytics_bp, url_prefix='/api/analytics')
-    app.register_blueprint(negotiation_bp, url_prefix='/api/negotiation')
-    app.register_blueprint(payment_bp, url_prefix='/api/payments')
+    app.register_blueprint(auth_bp, url_prefix="/api/auth")
+    app.register_blueprint(orders_bp, url_prefix="/api/orders")
+    app.register_blueprint(wishlist_bp, url_prefix="/api/wishlist")
+    app.register_blueprint(bargain_bp, url_prefix="/api/bargain")
+    app.register_blueprint(livestock_bp, url_prefix="/api/livestock")
+    app.register_blueprint(disputes_bp, url_prefix="/api/disputes")
+    app.register_blueprint(reviews_bp, url_prefix="/api/reviews")
+    app.register_blueprint(analytics_bp, url_prefix="/api/analytics")
+    app.register_blueprint(negotiation_bp, url_prefix="/api/negotiation")
+    app.register_blueprint(payment_bp, url_prefix="/api/payments")
+    app.register_blueprint(notifications_bp, url_prefix="/api")
 
     # Serve uploaded images
     uploads_dir = os.path.join(os.getcwd(), "uploads")
@@ -90,6 +85,14 @@ def create_app(config_name="default"):
         @app.route("/uploads/<path:filename>")
         def serve_upload(filename):
             return send_from_directory(uploads_dir, filename)
+
+    # Serve static uploads
+    static_uploads_dir = os.path.join(os.path.dirname(__file__), "static", "uploads")
+    if os.path.exists(static_uploads_dir):
+
+        @app.route("/static/uploads/<path:filename>")
+        def serve_static_upload(filename):
+            return send_from_directory(static_uploads_dir, filename)
 
     # Health check endpoint
     @app.route("/api/health", methods=["GET"])
@@ -116,8 +119,8 @@ def create_app(config_name="default"):
                 "disputes": "/api/disputes/",
                 "analytics": "/api/analytics/farmer",
                 "negotiation": "/api/negotiation/<livestock_id>",
-                "payments": "/api/payments/"
-            }
+                "payments": "/api/payments/",
+            },
         }), 200
 
 
