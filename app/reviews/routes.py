@@ -108,6 +108,15 @@ def create_review():
         comment=comment,
         tags=tags if isinstance(tags, list) else [],
     )
+ try:
+        current_app.logger.info(
+            f"Creating review for order {order.id}, rating={rating}"
+        )
+
+        db.session.add(review)
+        order.has_review = True
+        _update_farmer_rating(farmer.user_id)
+        current_app.logger.info(f"Review added and farmer rating updated")
 
 
 
