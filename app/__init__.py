@@ -20,9 +20,9 @@ def create_app(config_name="default"):
     app_config = config.get(config_name, config["default"])
     app.config.from_object(app_config)
 
-<<<<<<< HEAD
+
     # Initialize extensions
-=======
+
 
     # Initialize extensions
     # Allow all origins for development (including ngrok)
@@ -45,7 +45,7 @@ def create_app(config_name="default"):
         },
     )
 
->>>>>>> main
+
     db.init_app(app)
     migrate.init_app(app, db)
     jwt.init_app(app)
