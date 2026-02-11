@@ -134,6 +134,24 @@ def create_review():
                     # Trigger M-Pesa B2C Payout
                     payout_res = MpesaService.initiate_b2c(
                         escrow.seller_phone, escrow.amount, order.id
+if payout_res.get("ResponseCode") == "0":
+                        escrow.status = "releasing"
+                        escrow.b2c_conversation_id = payout_res.get("ConversationID")
+                        order.status = "completed"
+                        payout_triggered = True
+                        current_app.logger.info(
+                            f"Auto-payout triggered for Order {order.id} due to {rating}-star review."
+                        )
+                    else:
+                        current_app.logger.warning(
+                            f"M-Pesa B2C failed for Order {order.id}: {payout_res}"
+                        )
+                except Exception as mpesa_error:
+                    current_app.logger.error(f"M-Pesa B2C error: {str(mpesa_error)}")
+                    # Continue without failing the review
+                    payout_triggered = False
+
+                        
                     )
 
 
