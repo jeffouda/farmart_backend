@@ -153,6 +153,17 @@ if payout_res.get("ResponseCode") == "0":
 
                         
                     )
+                    db.session.commit()
+
+        return jsonify({
+            "message": "Review created successfully",
+            "payout_initiated": payout_triggered,
+            "review": review.to_dict(),
+            "farmer_new_average": float(farmer.user.average_rating)
+            if farmer.user
+            else 0,
+        }), 201
+
 
 
 
