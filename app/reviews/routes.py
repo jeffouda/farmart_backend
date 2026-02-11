@@ -99,6 +99,16 @@ def create_review():
       farmer = Farmer.query.get(order.farmer_id)
     if not farmer:
         return jsonify({"error": "Farmer not found for this order"}), 404
+      # Create the review
+    review = Review(
+        order_id=order.id,
+        reviewer_id=current_user_id,
+        target_id=farmer.user_id,
+        rating=rating,
+        comment=comment,
+        tags=tags if isinstance(tags, list) else [],
+    )
+
 
 
 
