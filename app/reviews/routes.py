@@ -51,4 +51,8 @@ def create_review():
         current_user_id = uuid.UUID(current_user_id_str)
     except ValueError:
         return jsonify({"error": "Invalid user ID format"}), 400
+     data = request.get_json()
+    if not data:
+        return jsonify({"error": "No data provided"}), 400
+
 
