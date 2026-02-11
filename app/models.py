@@ -53,7 +53,6 @@ class User(db.Model, TimestampMixin):
         return check_password_hash(self.password_hash, password)
 
     def __repr__(self):
-        return f"<PendingCheckout {self.id} | Status: {self.status}>"
         return f"<User {self.email} | Role: {self.role}>"
 
 
@@ -72,7 +71,6 @@ class Farmer(db.Model, TimestampMixin):
     animals = db.relationship("Animal", backref="owner", lazy=True)
 
     def __repr__(self):
-        return f"<PendingCheckout {self.id} | Status: {self.status}>"
         return f"<Farmer {self.farm_name} | User: {self.user_id}>"
 
 
@@ -86,7 +84,6 @@ class Buyer(db.Model, TimestampMixin):
     preferred_contact = db.Column(db.String(50))
 
     def __repr__(self):
-        return f"<PendingCheckout {self.id} | Status: {self.status}>"
         return f"<Buyer {self.user_id}>"
 
 
@@ -176,7 +173,6 @@ class EscrowRecord(db.Model, TimestampMixin):
     b2c_conversation_id = db.Column(db.String(100), unique=True, nullable=True) # Links to the farmer payout result
 
     def __repr__(self):
-        return f"<PendingCheckout {self.id} | Status: {self.status}>"
         return f"<Escrow Order: {self.order_id} | Status: {self.status}>"
 
 class Review(db.Model, TimestampMixin):

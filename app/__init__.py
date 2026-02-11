@@ -20,19 +20,30 @@ def create_app(config_name="default"):
     app_config = config.get(config_name, config["default"])
     app.config.from_object(app_config)
 
-
     # Initialize extensions
     # Allow all origins for development (including ngrok)
+    # Use BASE_URL from environment for ngrok URL if available
+    allowed_origins = ["http://localhost:5173", "http://127.0.0.1:5173"]
+
+    # Add BASE_URL from environment if available (for ngrok)
+    base_url = os.environ.get("BASE_URL")
+    if base_url:
+        allowed_origins.append(base_url)
+
     CORS(
         app,
         resources={
             r"/api/*": {
-                "origins": ["http://localhost:5173", "http://127.0.0.1:5173"],
+                "origins": allowed_origins,
                 "methods": ["GET", "POST", "PUT", "DELETE", "OPTIONS"],
-                "allow_headers": ["Content-Type", "Authorization", "ngrok-skip-browser-warning"],
+                "allow_headers": [
+                    "Content-Type",
+                    "Authorization",
+                    "ngrok-skip-browser-warning",
+                ],
+                "supports_credentials": True,  # CRITICAL: This allows the browser to accept the response
             }
         },
-        supports_credentials=True  # CRITICAL: This allows the browser to accept the response
     )
 
     db.init_app(app)
@@ -50,7 +61,7 @@ def create_app(config_name="default"):
     from app.analytics import analytics_bp
     from app.negotiation import negotiation_bp
     from app.payments import payment_bp
-    from app.notifications import notifications_bp
+    from app.admin import admin_bp
 
     app.register_blueprint(auth_bp, url_prefix="/api/auth")
     app.register_blueprint(orders_bp, url_prefix="/api/orders")
@@ -62,7 +73,20 @@ def create_app(config_name="default"):
     app.register_blueprint(analytics_bp, url_prefix="/api/analytics")
     app.register_blueprint(negotiation_bp, url_prefix="/api/negotiation")
     app.register_blueprint(payment_bp, url_prefix="/api/payments")
+
+    # Import and register notifications routes manually to avoid circular imports
+    from app.notifications.routes import (
+        get_notifications,
+        get_unread_count,
+        mark_notification_read,
+        mark_all_read,
+        delete_notification,
+        notifications_bp,
+    )
+
     app.register_blueprint(notifications_bp, url_prefix="/api")
+
+    app.register_blueprint(admin_bp, url_prefix="/api/admin")
 
     # Serve uploaded images
     uploads_dir = os.path.join(os.getcwd(), "uploads")
@@ -84,6 +108,18 @@ def create_app(config_name="default"):
     @app.route("/api/health", methods=["GET"])
     def health_check():
         return jsonify({"status": "online", "message": "System is healthy"}), 200
+
+    # Debug endpoint to list all routes
+    @app.route("/api/debug/routes", methods=["GET"])
+    def list_routes():
+        routes = []
+        for rule in app.url_map.iter_rules():
+            routes.append({
+                "methods": list(rule.methods),
+                "endpoint": rule.endpoint,
+                "rule": str(rule),
+            })
+        return jsonify({"routes": routes}), 200
 
     # Root endpoint - API info
     @app.route("/", methods=["GET"])
