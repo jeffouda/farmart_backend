@@ -177,6 +177,16 @@ def get_farmer_reviews(farmer_id):
         farmer_uuid = uuid.UUID(farmer_id)
     except ValueError:
         return jsonify({"error": "Invalid farmer ID format"}), 400
+user = User.query.filter_by(id=farmer_uuid, role="farmer").first()
+    if not user:
+        return jsonify({"message": "Farmer not found"}), 404
+
+    reviews = (
+        Review.query
+        .filter_by(target_id=farmer_uuid)
+        .order_by(Review.created_at.desc())
+        .all()
+    )
 
 
 
