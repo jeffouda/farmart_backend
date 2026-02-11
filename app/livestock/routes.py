@@ -260,43 +260,67 @@ def seed_test_animal():
     }), 201
 
 
-@livestock_bp.route("/list", methods=["GET"])
-@jwt_required()
+@livestock_bp.route('/', methods=['GET', 'OPTIONS'])
+@jwt_required(optional=True)
 def list_animals():
     """
-    List all available animals for the authenticated user (farmer's own animals).
+    Marketplace Endpoint: Lists all available animals for everyone.
+    If a user is logged in as a farmer, we can optionally filter or tag their own.
     """
-    user_id_str = get_jwt_identity()
+    # 1. Get query parameters from the React Marketplace
+    search_query = request.args.get('search')
+    species = request.args.get('species') # e.g., "Cattle,Goats"
+    min_price = request.args.get('min_price')
+    max_price = request.args.get('max_price')
+    location = request.args.get('location')
+    sort_by = request.args.get('sort', 'newest')
 
-    try:
-        user_id_uuid = uuid.UUID(user_id_str)
-    except ValueError:
-        return jsonify({"error": "Invalid user ID format"}), 400
+    # 2. Base Query: Only show 'available' animals to the public
+    query = Animal.query.filter(Animal.status.ilike("available"))
 
-    user = User.query.get(user_id_uuid)
-    if not user:
-        return jsonify({"error": "User not found"}), 404
+    # 3. Apply Filters
+    if search_query:
+        query = query.filter(Animal.breed.ilike(f"%{search_query}%") | 
+                             Animal.species.ilike(f"%{search_query}%"))
+    
+    if species:
+        species_list = species.split(',')
+        query = query.filter(Animal.species.in_(species_list))
 
-    # Only farmers can list their own animals
-    if user.role.value != "farmer":
-        return jsonify({"error": "Only farmers can list their animals"}), 403
+    if min_price:
+        query = query.filter(Animal.price >= float(min_price))
+    
+    if max_price:
+        query = query.filter(Animal.price <= float(max_price))
 
-    farmer = Farmer.query.filter_by(user_id=user_id_uuid).first()
-    if not farmer:
-        return jsonify({"error": "Farmer profile not found"}), 404
+    # 4. Sorting
+    if sort_by == 'price_low':
+        query = query.order_by(Animal.price.asc())
+    elif sort_by == 'price_high':
+        query = query.order_by(Animal.price.desc())
+    else:
+        query = query.order_by(Animal.created_at.desc())
 
-    # Get farmer's animals with case-insensitive status filter
-    animals = (
-        Animal.query
-        .filter(Animal.farmer_id == farmer.id, Animal.status.ilike("available"))
-        .order_by(Animal.created_at.desc())
-        .all()
-    )
+    animals = query.all()
 
     return jsonify({
         "animals": [a.to_dict() for a in animals],
         "count": len(animals),
     }), 200
+
+# NEW ROUTE: Specific for Farmer's private dashboard
+@livestock_bp.route('/my-inventory', methods=['GET'])
+@jwt_required()
+def get_my_inventory():
+    user_id_str = get_jwt_identity()
+    user_id_uuid = uuid.UUID(user_id_str)
+    
+    farmer = Farmer.query.filter_by(user_id=user_id_uuid).first()
+    if not farmer:
+        return jsonify({"error": "Farmer profile not found"}), 404
+
+    animals = Animal.query.filter_by(farmer_id=farmer.id).all()
+    return jsonify({"animals": [a.to_dict() for a in animals]}), 200
 
 
 @livestock_bp.route("", methods=["GET"])
