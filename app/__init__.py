@@ -22,35 +22,31 @@ def create_app(config_name="default"):
 
 
     # Initialize extensions
-
-
-    # Initialize extensions
-    # Allow all origins for development (including ngrok)
-    CORS(
-        app,
-        resources={
-            r"/api/*": {
-                "origins": ["http://localhost:5173", "http://127.0.0.1:5173"],
-                "methods": ["GET", "POST", "PUT", "DELETE", "OPTIONS"],
-                "allow_headers": ["Content-Type", "Authorization", "ngrok-skip-browser-warning"],
-            }
-        },
-        supports_credentials=True  # CRITICAL: This allows the browser to accept the response
-    )
-
-
     db.init_app(app)
     migrate.init_app(app, db)
     jwt.init_app(app)
 
-    # Enable CORS **only for API routes** and allow necessary headers/methods
+    # Unified CORS configuration for API routes
+    # Allows localhost, ngrok URLs, and includes the ngrok-skip-browser-warning header
     CORS(
         app,
-        resources={r"/api/*": {"origins": "http://localhost:5173"}},
-        supports_credentials=True,
-        expose_headers=["Content-Type", "Authorization"],
-        allow_headers=["Content-Type", "Authorization"],
-        methods=["GET", "POST", "PUT", "DELETE", "OPTIONS"],
+        resources={
+            r"/api/*": {
+                "origins": [
+                    "http://localhost:5173",
+                    "http://127.0.0.1:5173",
+                ],
+                "methods": ["GET", "POST", "PUT", "DELETE", "OPTIONS", "PATCH"],
+                "allow_headers": [
+                    "Content-Type",
+                    "Authorization",
+                    "ngrok-skip-browser-warning",
+                    "Access-Control-Allow-Origin",
+                ],
+                "expose_headers": ["Content-Type", "Authorization"],
+                "supports_credentials": True,
+            }
+        },
     )
 
     # Register blueprints
