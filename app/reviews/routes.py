@@ -117,6 +117,25 @@ def create_review():
         order.has_review = True
         _update_farmer_rating(farmer.user_id)
         current_app.logger.info(f"Review added and farmer rating updated")
+          # --- ESCROW AUTO-RELEASE LOGIC ---
+        payout_triggered = False
+        if rating >= 4:
+            escrow = EscrowRecord.query.filter_by(
+                order_id=order.id, status="held"
+            ).first()
+            current_app.logger.info(
+                f"Checking escrow for order {order.id}: escrow={escrow}"
+            )
+            if escrow:
+                current_app.logger.info(
+                    f"Found held escrow for order {order.id}, triggering B2C payout"
+                )
+                try:
+                    # Trigger M-Pesa B2C Payout
+                    payout_res = MpesaService.initiate_b2c(
+                        escrow.seller_phone, escrow.amount, order.id
+                    )
+
 
 
 
