@@ -53,6 +53,7 @@ class User(db.Model, TimestampMixin):
         return check_password_hash(self.password_hash, password)
 
     def __repr__(self):
+        return f"<PendingCheckout {self.id} | Status: {self.status}>"
         return f"<User {self.email} | Role: {self.role}>"
 
 
@@ -71,6 +72,7 @@ class Farmer(db.Model, TimestampMixin):
     animals = db.relationship("Animal", backref="owner", lazy=True)
 
     def __repr__(self):
+        return f"<PendingCheckout {self.id} | Status: {self.status}>"
         return f"<Farmer {self.farm_name} | User: {self.user_id}>"
 
 
@@ -84,6 +86,7 @@ class Buyer(db.Model, TimestampMixin):
     preferred_contact = db.Column(db.String(50))
 
     def __repr__(self):
+        return f"<PendingCheckout {self.id} | Status: {self.status}>"
         return f"<Buyer {self.user_id}>"
 
 
@@ -173,6 +176,7 @@ class EscrowRecord(db.Model, TimestampMixin):
     b2c_conversation_id = db.Column(db.String(100), unique=True, nullable=True) # Links to the farmer payout result
 
     def __repr__(self):
+        return f"<PendingCheckout {self.id} | Status: {self.status}>"
         return f"<Escrow Order: {self.order_id} | Status: {self.status}>"
 
 class Review(db.Model, TimestampMixin):
@@ -263,6 +267,155 @@ class BargainMessage(db.Model):
         }
 
 
+class Dispute(db.Model, TimestampMixin):
+    __tablename__ = "disputes"
+    
+    id = db.Column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
+    ticket_id = db.Column(db.String(20), unique=True, nullable=False)
+    
+    # Link to order (if dispute is about an order)
+    order_id = db.Column(UUID(as_uuid=True), db.ForeignKey("orders.id"), nullable=True)
+    
+    # Dispute parties
+    filer_id = db.Column(UUID(as_uuid=True), db.ForeignKey("users.id"), nullable=False)
+    target_id = db.Column(UUID(as_uuid=True), db.ForeignKey("users.id"), nullable=True)
+    
+    # Dispute details
+    dispute_type = db.Column(db.String(20), default="order")  # 'order', 'user', 'livestock'
+    reason = db.Column(db.String(50), nullable=False)
+    description = db.Column(db.Text, nullable=False)
+    resolution = db.Column(db.String(20))  # 'refund', 'replacement', 'report'
+    
+    # Status
+    status = db.Column(db.String(20), default="open")  # 'open', 'pending', 'resolved', 'dismissed'
+    admin_notes = db.Column(db.Text, nullable=True)
+    admin_decision = db.Column(db.String(20), nullable=True)  # 'refund_buyer', 'release_farmer', 'dismiss'
+    
+    # Farmer response fields
+    farmer_response = db.Column(db.Text, nullable=True)
+    farmer_response_at = db.Column(db.DateTime, nullable=True)
+    farmer_evidence = db.Column(db.String(255), nullable=True)  # Path to uploaded evidence
+    
+    # Buyer response fields (when farmer files dispute)
+    buyer_response = db.Column(db.Text, nullable=True)
+    buyer_response_at = db.Column(db.DateTime, nullable=True)
+    buyer_evidence = db.Column(db.String(255), nullable=True)
+    
+    # Relationships
+    order = db.relationship("Order", backref="dispute")
+    filer = db.relationship("User", foreign_keys=[filer_id], backref="disputes_filed")
+    target = db.relationship("User", foreign_keys=[target_id], backref="disputes_against")
+    
+    def to_dict(self):
+        return {
+            "id": str(self.id),
+            "ticket_id": self.ticket_id,
+            "order_id": str(self.order_id) if self.order_id else None,
+            "filer_id": str(self.filer_id),
+            "target_id": str(self.target_id) if self.target_id else None,
+            "dispute_type": self.dispute_type,
+            "reason": self.reason,
+            "description": self.description,
+            "resolution": self.resolution,
+            "status": self.status,
+            "admin_notes": self.admin_notes,
+            "admin_decision": self.admin_decision,
+            "farmer_response": self.farmer_response,
+            "farmer_response_at": self.farmer_response_at.isoformat() if self.farmer_response_at else None,
+            "farmer_evidence": self.farmer_evidence,
+            "buyer_response": self.buyer_response,
+            "buyer_response_at": self.buyer_response_at.isoformat() if self.buyer_response_at else None,
+            "buyer_evidence": self.buyer_evidence,
+            "created_at": self.created_at.isoformat() if self.created_at else None,
+            "updated_at": self.updated_at.isoformat() if self.updated_at else None,
+        }
+
+
+class Message(db.Model):
+    """
+    Model for direct messages between users about livestock.
+    Used by the negotiation API for messaging.
+    """
+    __tablename__ = "messages"
+
+    id = db.Column(db.Integer, primary_key=True, autoincrement=True)
+    sender_id = db.Column(UUID(as_uuid=True), db.ForeignKey("users.id"), nullable=False)
+    receiver_id = db.Column(UUID(as_uuid=True), db.ForeignKey("users.id"), nullable=False)
+    livestock_id = db.Column(UUID(as_uuid=True), db.ForeignKey("animals.id"), nullable=False)
+    content = db.Column(db.Text, nullable=False)
+    is_read = db.Column(db.Boolean, default=False)
+    created_at = db.Column(db.DateTime, default=datetime.utcnow)
+
+    sender = db.relationship("User", foreign_keys=[sender_id], backref="messages_sent")
+    receiver = db.relationship("User", foreign_keys=[receiver_id], backref="messages_received")
+    livestock = db.relationship("Animal", backref="messages")
+
+    def to_dict(self):
+        return {
+            "id": self.id,
+            "sender_id": str(self.sender_id),
+            "receiver_id": str(self.receiver_id),
+            "livestock_id": str(self.livestock_id),
+            "content": self.content,
+            "is_read": self.is_read,
+            "created_at": self.created_at.isoformat() if self.created_at else None,
+        }
+
+
+class Notification(db.Model):
+    """
+    Model for user notifications (orders, negotiations, disputes)
+    """
+    __tablename__ = "notifications"
+
+    id = db.Column(db.Integer, primary_key=True, autoincrement=True)
+    user_id = db.Column(UUID(as_uuid=True), db.ForeignKey("users.id"), nullable=False)
+    
+    # Notification types
+    type = db.Column(db.String(30), nullable=False)  # 'new_order', 'new_negotiation', 'new_dispute', 'order_update', 'negotiation_update'
+    title = db.Column(db.String(100), nullable=False)
+    message = db.Column(db.Text, nullable=False)
+    
+    # Related entity references
+    related_id = db.Column(UUID(as_uuid=True), nullable=True)  # order_id, bargain_id, dispute_id
+    related_type = db.Column(db.String(30), nullable=True)  # 'order', 'negotiation', 'dispute'
+    
+    # Status
+    is_read = db.Column(db.Boolean, default=False)
+    read_at = db.Column(db.DateTime, nullable=True)
+    
+    # Timestamps
+    created_at = db.Column(db.DateTime, default=datetime.utcnow)
+
+    user = db.relationship("User", backref="notifications")
+
+    def to_dict(self):
+        return {
+            "id": self.id,
+            "user_id": str(self.user_id),
+            "type": self.type,
+            "title": self.title,
+            "message": self.message,
+            "related_id": str(self.related_id) if self.related_id else None,
+            "related_type": self.related_type,
+            "is_read": self.is_read,
+            "created_at": self.created_at.isoformat() if self.created_at else None,
+        }
+
+
+def create_notification(user_id, type, title, message, related_id=None, related_type=None):
+    """Helper function to create a notification"""
+    notification = Notification(
+        user_id=user_id,
+        type=type,
+        title=title,
+        message=message,
+        related_id=related_id,
+        related_type=related_type
+    )
+    db.session.add(notification)
+    db.session.commit()
+    return notification
 class PendingCheckout(db.Model, TimestampMixin):
     """
     Temporary storage for checkout data before payment is confirmed.

@@ -1,29 +1,203 @@
 from flask import jsonify, request, current_app
 from flask_jwt_extended import jwt_required, get_jwt_identity
+from functools import wraps
 import uuid
 from app.models import Order, Buyer, User, Farmer, BargainSession, Animal, EscrowRecord
 from app import db
 from . import orders_bp
 from app.services.mpesa_service import MpesaService
+from app.models import create_notification
+
+
+def get_uuid(val):
+    """Helper to convert string to UUID."""
+    if isinstance(val, uuid.UUID):
+        return val
+    try:
+        return uuid.UUID(val)
+    except ValueError:
+        return None
+
+
+def admin_required(f):
+    """Decorator to require admin role."""
+    @wraps(f)
+    def decorated_function(*args, **kwargs):
+        current_user_id_str = get_jwt_identity()
+        user_uuid = get_uuid(current_user_id_str)
+        if not user_uuid:
+            return jsonify({"error": "Invalid user ID format"}), 400
+        
+        user = User.query.get(user_uuid)
+        if not user or user.role.value != "admin":
+            return jsonify({"error": "Admin access required"}), 403
+        
+        return f(*args, **kwargs)
+    return decorated_function
+
+
+@orders_bp.route("/admin/all", methods=["GET"])
+@jwt_required()
+@admin_required
+def get_all_orders_admin():
+    """Get all orders for admin dashboard."""
+    orders = Order.query.order_by(Order.created_at.desc()).all()
+    
+    # Build response with buyer and farmer info
+    orders_data = []
+    for order in orders:
+        # Get buyer info
+        buyer = Buyer.query.get(order.buyer_id)
+        buyer_user = User.query.get(buyer.user_id) if buyer else None
+        
+        # Get farmer info
+        farmer = Farmer.query.get(order.farmer_id)
+        farmer_user = User.query.get(farmer.user_id) if farmer else None
+        
+        order_dict = order.to_dict()
+        order_dict.update({
+            "buyer_name": buyer_user.full_name if buyer_user else "Unknown",
+            "buyer_email": buyer_user.email if buyer_user else "Unknown",
+            "farmer_name": farmer.farm_name if farmer else "Unknown",
+            "farmer_location": farmer.location if farmer else "Unknown",
+        })
+        orders_data.append(order_dict)
+    
+    return jsonify(orders_data), 200
+
+
+# Admin User Management Endpoints
+@orders_bp.route("/admin/farmers", methods=["GET"])
+@jwt_required()
+@admin_required
+def get_all_farmers_admin():
+    """Get all farmers for admin dashboard."""
+    farmers = Farmer.query.all()
+    
+    farmers_data = []
+    for farmer in farmers:
+        user = User.query.get(farmer.user_id)
+        # Count animals
+        animal_count = Animal.query.filter_by(farmer_id=farmer.id).count()
+        
+        farmers_data.append({
+            "id": str(farmer.id),
+            "user_id": str(farmer.user_id),
+            "name": user.full_name if user else farmer.farm_name,
+            "email": user.email if user else None,
+            "location": farmer.location,
+            "phone_number": farmer.phone_number,
+            "status": "pending" if not farmer.is_verified else "active",
+            "rating": user.average_rating if user else 0,
+            "joinDate": farmer.created_at.strftime("%Y-%m-%d") if farmer.created_at else None,
+            "livestockCount": animal_count,
+            "verified": farmer.is_verified,
+            "is_active": user.is_active if user else True,
+        })
+    
+    return jsonify(farmers_data), 200
+
+
+@orders_bp.route("/admin/buyers", methods=["GET"])
+@jwt_required()
+@admin_required
+def get_all_buyers_admin():
+    """Get all buyers for admin dashboard."""
+    buyers = Buyer.query.all()
+    
+    buyers_data = []
+    for buyer in buyers:
+        user = User.query.get(buyer.user_id)
+        # Count orders
+        order_count = Order.query.filter_by(buyer_id=buyer.id).count()
+        
+        buyers_data.append({
+            "id": str(buyer.id),
+            "user_id": str(buyer.user_id),
+            "name": user.full_name if user else "Unknown",
+            "email": user.email if user else None,
+            "location": user.location or buyer.delivery_address or "Unknown",
+            "status": "active" if user.is_active else "suspended",
+            "totalOrders": order_count,
+            "joinDate": buyer.created_at.strftime("%Y-%m-%d") if buyer.created_at else None,
+            "is_active": user.is_active if user else True,
+        })
+    
+    return jsonify(buyers_data), 200
+
+
+@orders_bp.route("/admin/farmers/<string:farmer_user_id>/verify", methods=["POST"])
+@jwt_required()
+@admin_required
+def verify_farmer_admin(farmer_user_id):
+    """Verify a farmer (mark as verified)."""
+    user_uuid = get_uuid(farmer_user_id)
+    if not user_uuid:
+        return jsonify({"error": "Invalid user ID format"}), 400
+    
+    # Find farmer by user_id
+    farmer = Farmer.query.filter_by(user_id=user_uuid).first()
+    if not farmer:
+        return jsonify({"error": "Farmer not found"}), 404
+    
+    farmer.is_verified = True
+    db.session.commit()
+    
+    return jsonify({"message": "Farmer verified successfully"}), 200
+
+
+@orders_bp.route("/admin/users/<string:user_id>/suspend", methods=["POST"])
+@jwt_required()
+@admin_required
+def suspend_user_admin(user_id):
+    """Suspend a user (farmer or buyer)."""
+    user_uuid = get_uuid(user_id)
+    if not user_uuid:
+        return jsonify({"error": "Invalid user ID format"}), 400
+    
+    user = User.query.get(user_uuid)
+    if not user:
+        return jsonify({"error": "User not found"}), 404
+    
+    user.is_active = False
+    db.session.commit()
+    
+    return jsonify({"message": "User suspended successfully"}), 200
+
+
+@orders_bp.route("/admin/users/<string:user_id>/activate", methods=["POST"])
+@jwt_required()
+@admin_required
+def activate_user_admin(user_id):
+    """Activate a suspended user."""
+    user_uuid = get_uuid(user_id)
+    if not user_uuid:
+        return jsonify({"error": "Invalid user ID format"}), 400
+    
+    user = User.query.get(user_uuid)
+    if not user:
+        return jsonify({"error": "User not found"}), 404
+    
+    user.is_active = True
+    db.session.commit()
+    
+    return jsonify({"message": "User activated successfully"}), 200
+
 
 @orders_bp.route("/", methods=["GET"])
 @jwt_required()
 def get_my_orders():
     """Get all orders for the current authenticated user (as buyer)."""
     current_user_id_str = get_jwt_identity()
-    try:
-        current_user_id = uuid.UUID(current_user_id_str)
-    except ValueError:
+    user_uuid = get_uuid(current_user_id_str)
+    if not user_uuid:
         return jsonify({"error": "Invalid user ID format"}), 400
 
-    buyer = Buyer.query.filter_by(user_id=current_user_id).first()
+    buyer = Buyer.query.filter_by(user_id=user_uuid).first()
     if not buyer:
         return jsonify({"message": "No buyer profile found for this user"}), 404
 
-    orders = Order.query.filter(
-        Order.buyer_id == buyer.id,
-        Order.status.notin_(["failed"])  # Include payment_pending orders (they're valid during processing)
-    ).all()
+    orders = Order.query.filter(Order.buyer_id == buyer.id).all()
 
     return jsonify([order.to_dict() for order in orders]), 200
 
@@ -33,259 +207,259 @@ def get_my_orders():
 def get_my_sales():
     """Get all sales for the current farmer."""
     current_user_id_str = get_jwt_identity()
-    try:
-        current_user_id = uuid.UUID(current_user_id_str)
-    except ValueError:
+    user_uuid = get_uuid(current_user_id_str)
+    if not user_uuid:
         return jsonify({"error": "Invalid user ID format"}), 400
 
-    farmer = Farmer.query.filter_by(user_id=current_user_id).first()
+    farmer = Farmer.query.filter_by(user_id=user_uuid).first()
     if not farmer:
         return jsonify({"message": "No farmer profile found for this user"}), 404
 
-    orders = Order.query.filter(
-        Order.farmer_id == farmer.id,
-        Order.status.notin_(["failed"])
-    ).all()
+    orders = Order.query.filter(Order.farmer_id == farmer.id).all()
+    
+    # Enrich orders with buyer info and animal images
+    orders_data = []
+    for order in orders:
+        order_dict = order.to_dict()
+        
+        # Get buyer info
+        buyer = Buyer.query.get(order.buyer_id)
+        buyer_user = User.query.get(buyer.user_id) if buyer else None
+        order_dict["buyer"] = {
+            "full_name": buyer_user.full_name if buyer_user else "Unknown",
+            "phone_number": buyer_user.phone_number if buyer_user else None,
+        }
+        
+        # Enrich items with animal images
+        enriched_items = []
+        for item in order.items:
+            enriched_item = dict(item)
+            if item.get("animal_id"):
+                animal_uuid = get_uuid(item["animal_id"])
+                if animal_uuid:
+                    animal = Animal.query.get(animal_uuid)
+                    if animal:
+                        enriched_item["image_url"] = animal.image_url
+                        enriched_item["species"] = animal.species
+            enriched_items.append(enriched_item)
+        order_dict["items"] = enriched_items
+        
+        orders_data.append(order_dict)
 
-    return jsonify([order.to_dict() for order in orders]), 200
+    return jsonify(orders_data), 200
 
 
 @orders_bp.route("/", methods=["POST"])
 @jwt_required()
 def create_order():
-    """
-    Initiates M-Pesa STK Push payment first.
-    Order is ONLY created in the database when payment callback confirms success.
-    This prevents zombie orders on timeout/failure.
-    """
-    from app.models import PendingCheckout
-    
+    """Initiates payment and saves order with 'payment_pending' status."""
     current_user_id_str = get_jwt_identity()
-    try:
-        current_user_id = uuid.UUID(current_user_id_str)
-    except ValueError:
+    user_uuid = get_uuid(current_user_id_str)
+    if not user_uuid:
         return jsonify({"error": "Invalid user ID format"}), 400
 
-    buyer = Buyer.query.filter_by(user_id=current_user_id).first()
+    buyer = Buyer.query.filter_by(user_id=user_uuid).first()
     if not buyer:
         return jsonify({"message": "No buyer profile found for this user"}), 404
 
     data = request.get_json()
     phone = data.get("phone_number") or data.get("phone")
-    
+
     if not data or "items" not in data or "total_amount" not in data or not phone:
         return jsonify({"message": "Missing required fields"}), 400
-
-    # Format phone number for M-Pesa
-    formatted_phone = MpesaService.format_phone_number(phone)
-    if not formatted_phone:
-        return jsonify({"message": "Invalid phone number format. Use 07XXXXXXXX or +254XXXXXXXXX"}), 400
 
     items = data["items"]
     farmer_id = None
     if items and len(items) > 0:
-        animal = Animal.query.get(items[0].get("animal_id"))
-        if animal:
-            farmer_id = animal.farmer_id
+        animal_id_str = items[0].get("animal_id")
+        if animal_id_str:
+            animal_uuid = get_uuid(animal_id_str)
+            if animal_uuid:
+                animal = Animal.query.filter_by(id=animal_uuid).first()
+                if animal:
+                    farmer_id = animal.farmer_id
 
     if not farmer_id:
         return jsonify({"message": "Could not determine farmer"}), 400
 
-    # Generate a temporary order reference for STK push
-    temp_order_id = str(uuid.uuid4())
+    order = Order(
+        buyer_id=buyer.id,
+        farmer_id=farmer_id,
+        items=items,
+        total_amount=data["total_amount"],
+        status="payment_pending",
+        payment_method="mpesa",
+    )
 
+    db.session.add(order)
+    db.session.commit()
+
+    # Create notifications
     try:
-        # 1. First initiate STK Push
+        # Get farmer's user_id
+        farmer = Farmer.query.get(farmer_id)
+        if farmer:
+            # Notify farmer
+            create_notification(
+                user_id=farmer.user_id,
+                type='new_order',
+                title='New Order Received!',
+                message=f'You received a new order worth KES {float(data["total_amount"]):,.0f}',
+                related_id=str(order.id),
+                related_type='order'
+            )
+        # Notify buyer
+        create_notification(
+            user_id=user_uuid,
+            type='order_placed',
+            title='Order Placed Successfully',
+            message=f'Your order has been placed successfully. Total: KES {float(data["total_amount"]):,.0f}',
+            related_id=str(order.id),
+            related_type='order'
+        )
+    except Exception as e:
+        current_app.logger.error(f"Error creating notifications: {str(e)}")
+
+    mpesa_response = None
+    try:
         stk_response = MpesaService.stk_push(
-            formatted_phone, 
-            int(float(data["total_amount"])), 
-            temp_order_id  # Use temp_order_id as AccountReference
+            phone, int(float(data["total_amount"])), str(order.id)
         )
 
-        if stk_response.get('ResponseCode') != '0':
-            current_app.logger.error(f"Mpesa STK Rejected: {stk_response}")
-            return jsonify({
-                "message": "M-Pesa STK Push failed", 
-                "error": stk_response.get('error', 'Unknown error')
-            }), 400
-
-        checkout_request_id = stk_response.get('CheckoutRequestID')
-        current_app.logger.info(f"STK Push initiated with CheckoutRequestID: {checkout_request_id}")
-
-        # 2. Save checkout data to PendingCheckout (NOT to Order table yet)
-        pending_checkout = PendingCheckout(
-            id=temp_order_id,  # Use the same ID
-            buyer_id=buyer.id,
-            farmer_id=farmer_id,
-            bargain_id=data.get("bargain_id"),
-            items=items,
-            total_amount=data["total_amount"],
-            payment_method=data.get("payment_method", "mpesa"),
-            checkout_id=checkout_request_id,
-            status="pending"
-        )
-        db.session.add(pending_checkout)
-        db.session.commit()
-        current_app.logger.info(f"PendingCheckout created: {temp_order_id}")
-
-        # 3. Return the checkout_id for polling
-        # Order will be created in the callback when payment succeeds
-        return jsonify({
-            "message": "Payment initiated. Complete payment to create order.",
-            "temp_order_id": temp_order_id,
-            "checkout_id": checkout_request_id,
-            "pending_amount": int(float(data["total_amount"]))
-        }), 200
+        if stk_response.get("ResponseCode") == "0":
+            order.checkout_id = stk_response.get("CheckoutRequestID")
+            db.session.commit()
+            current_app.logger.info(f"STK Push initiated for Order {order.id}")
+            mpesa_response = stk_response
+        else:
+            current_app.logger.error(f"Mpesa Rejected: {stk_response}")
+            mpesa_response = stk_response
 
     except Exception as e:
-        db.session.rollback()
         current_app.logger.error(f"M-Pesa Error: {str(e)}")
-        return jsonify({"message": "M-Pesa trigger failed", "error": str(e)}), 500
+        # Order is still created, just M-Pesa failed
+        mpesa_response = {"error": str(e)}
+
+    return jsonify({
+        "message": "Order created",
+        "order_id": str(order.id),
+        "mpesa_response": mpesa_response,
+    }), 201
 
 
-@orders_bp.route("/<uuid:order_id>/status", methods=["GET"])
+@orders_bp.route("/<string:order_id>/status", methods=["GET"])
 @jwt_required()
 def get_order_status(order_id):
     """Check if status changed to 'paid'."""
-    from app.models import PendingCheckout
-    
-    # First check if it's an actual Order
-    order = Order.query.get(order_id)
-    if order:
-        return jsonify({
-            "order_id": str(order.id),
-            "status": order.status, 
-            "is_paid": order.status not in ["payment_pending", "payment_failed", "failed"]
-        }), 200
-    
-    # Check if it's a PendingCheckout (not yet converted to Order)
-    pending = PendingCheckout.query.get(order_id)
-    if pending:
-        return jsonify({
-            "order_id": str(pending.id),
-            "status": pending.status,
-            "is_paid": pending.status == "paid",
-            "message": "Payment is being processed"
-        }), 200
-    
-    return jsonify({"error": "Not found"}), 404
+    order_uuid = get_uuid(order_id)
+    if not order_uuid:
+        return jsonify({"error": "Invalid order ID format"}), 400
+
+    order = Order.query.filter_by(id=order_uuid).first()
+    if not order:
+        return jsonify({"error": "Order not found"}), 404
+
+    return jsonify({
+        "order_id": str(order.id),
+        "status": order.status,
+        "is_paid": order.status not in ["payment_pending", "payment_failed"],
+    }), 200
 
 
-@orders_bp.route("/poll-status/<checkout_id>", methods=["GET"])
+@orders_bp.route("/<string:order_id>/status", methods=["PUT"])
 @jwt_required()
-def poll_checkout_status(checkout_id):
-    """
-    Poll this endpoint to check if payment has succeeded.
-    Returns the created order_id when payment is confirmed.
-    """
-    from app.models import PendingCheckout
+def update_order_status(order_id):
+    """Update order status (farmer marks as shipped)."""
+    order_uuid = get_uuid(order_id)
+    if not order_uuid:
+        return jsonify({"error": "Invalid order ID format"}), 400
     
-    pending = PendingCheckout.query.filter_by(checkout_id=checkout_id).first()
+    order = Order.query.filter_by(id=order_uuid).first()
+    if not order:
+        return jsonify({"error": "Order not found"}), 404
     
-    if not pending:
-        # Check if an order was already created
-        order = Order.query.filter_by(checkout_id=checkout_id).first()
-        if order:
-            return jsonify({
-                "status": "completed",
-                "order_id": str(order.id),
-                "message": "Order already created"
-            }), 200
-        return jsonify({"error": "Checkout not found"}), 404
+    data = request.get_json()
+    new_status = data.get("status")
     
-    if pending.status == "paid":
-        # Order should now exist - find it
-        # The order was created with a new UUID, not the pending id
-        order = Order.query.filter_by(checkout_id=checkout_id).first()
-        if order:
-            return jsonify({
-                "status": "completed",
-                "order_id": str(order.id),
-                "message": "Payment confirmed"
-            }), 200
-        return jsonify({
-            "status": "processing",
-            "message": "Payment confirmed, order being created..."
-        }), 200
-    elif pending.status == "cancelled":
-        return jsonify({
-            "status": "failed",
-            "message": "Payment was cancelled or failed"
-        }), 400
-    else:
-        # Still pending
-        return jsonify({
-            "status": "pending",
-            "message": "Waiting for payment..."
-        }), 200
+    # Map frontend status values to backend status values
+    status_map = {
+        "shipped": "in_transit",
+        "delivered": "completed",
+    }
+    actual_status = status_map.get(new_status, new_status)
+    
+    # Validate status transition
+    valid_transitions = {
+        "pending": ["in_transit"],
+        "processing": ["in_transit"],
+        "payment_pending": ["in_transit"],  # Allow shipping before payment completes
+        "in_transit": ["completed"],  # Buyer confirms delivery
+    }
+    
+    if new_status not in ["shipped", "in_transit"]:
+        return jsonify({"error": "Invalid status update. Use 'shipped' or 'in_transit'"}), 400
+    
+    # Check if transition is valid
+    if order.status not in valid_transitions:
+        return jsonify({"error": f"Cannot update order from {order.status} to {new_status}"}), 400
+    
+    if new_status not in valid_transitions.get(order.status, []):
+        return jsonify({"error": f"Cannot transition from {order.status} to {new_status}"}), 400
+    
+    # Map to actual status value
+    actual_status = "in_transit"
+    order.status = actual_status
+    db.session.commit()
+    
+    return jsonify({
+        "message": f"Order status updated to {actual_status}",
+        "order": order.to_dict()
+    }), 200
 
-@orders_bp.route("/<uuid:order_id>/confirm-receipt", methods=["OPTIONS", "POST"])
+
+@orders_bp.route("/<string:order_id>/confirm-receipt", methods=["POST"])
 @jwt_required()
 def confirm_receipt(order_id):
     """
     Buyer confirms delivery:
     1. Update Order status to 'completed'
-    2. Release funds to Farmer via M-Pesa B2C
+    2. Move funds to Farmer wallet
     3. Update Escrow record to 'released'
     """
-    from app.models import PendingCheckout
-    
-    # First check if it's an actual Order
-    order = Order.query.get(order_id)
-    
-    # If not found, check if it's still pending (not yet converted)
+    order_uuid = get_uuid(order_id)
+    if not order_uuid:
+        return jsonify({"error": "Invalid order ID format"}), 400
+
+    order = Order.query.filter_by(id=order_uuid).first()
     if not order:
-        pending = PendingCheckout.query.get(order_id)
-        if pending:
-            return jsonify({
-                "message": "Payment is still being processed. Please wait for payment confirmation.",
-                "status": pending.status
-            }), 400
-        return jsonify({"error": "Order not found. It may have been created with an older system version."}), 404
-    
-    escrow = EscrowRecord.query.filter_by(order_id=order_id).first()
-    
-    if order.status != "paid":
-        return jsonify({"message": f"Only paid orders can be confirmed. Current status: {order.status}"}), 400
+        return jsonify({"error": "Order not found"}), 404
+
+    if order.status not in ["paid", "payment_pending", "in_transit"]:
+        return jsonify({
+            "message": "Only paid, pending payment, or shipped orders can be confirmed for delivery"
+        }), 400
 
     try:
-        # Execute B2C Payout to release funds to farmer
-        if escrow and escrow.status == "held":
-            b2c_response = MpesaService.initiate_b2c(
-                escrow.seller_phone, 
-                float(escrow.amount), 
-                str(order.id)
-            )
-            
-            if b2c_response.get('ResponseCode') == '0':
-                # B2C initiated successfully
-                escrow.b2c_conversation_id = b2c_response.get('ConversationID')
-                escrow.status = "releasing"
-                current_app.logger.info(f"B2C initiated for Order {order.id}. ConversationID: {b2c_response.get('ConversationID')}")
-            else:
-                current_app.logger.error(f"B2C failed: {b2c_response}")
-                # Continue anyway - the funds are in escrow, we'll update status
-        
         # 1. Update Order State
         order.status = "completed"
         order.payment_status = "released"
-        
-        # 2. Update Farmer Wallet (as backup/fallback)
-        farmer = Farmer.query.get(order.farmer_id)
+
+        # 2. Update Farmer Wallet
+        farmer = Farmer.query.filter_by(id=order.farmer_id).first()
         if farmer:
             farmer.wallet_balance = (farmer.wallet_balance or 0) + order.total_amount
             current_app.logger.info(f"Wallet updated for Farmer {farmer.id}")
 
         # 3. Update Escrow Record
+        escrow = EscrowRecord.query.filter_by(order_id=order.id).first()
         if escrow:
-            if escrow.status == "held":
-                escrow.status = "released"  # Mark as released (B2C will be confirmed in callback)
+            escrow.status = "released"
             current_app.logger.info(f"Escrow released for Order {order.id}")
 
         db.session.commit()
         return jsonify({
-            "message": "Delivery confirmed and funds released to farmer.",
-            "order": order.to_dict()
+            "message": "Delivery confirmed and funds released.",
+            "order": order.to_dict(),
         }), 200
 
     except Exception as e:
@@ -294,22 +468,44 @@ def confirm_receipt(order_id):
         return jsonify({"error": "Internal server error during fund release"}), 500
 
 
-@orders_bp.route("/<uuid:order_id>", methods=["GET"])
+@orders_bp.route("/<string:order_id>", methods=["GET"])
 @jwt_required()
 def get_order(order_id):
-    order = Order.query.get_or_404(order_id)
-    return jsonify(order.to_dict()), 200
+    """Get a single order by ID."""
+    order_uuid = get_uuid(order_id)
+    if not order_uuid:
+        return jsonify({"error": "Invalid order ID format"}), 400
+
+    order = Order.query.filter_by(id=order_uuid).first()
+    if not order:
+        return jsonify({"error": "Order not found"}), 404
+    
+    # Get farmer info
+    farmer = Farmer.query.get(order.farmer_id)
+    farmer_user = User.query.get(farmer.user_id) if farmer else None
+    
+    order_dict = order.to_dict()
+    order_dict.update({
+        "farmer_name": farmer_user.full_name if farmer_user else "Unknown Farmer",
+        "farmer": farmer_user.full_name if farmer_user else "Unknown Farmer",
+    })
+    
+    return jsonify(order_dict), 200
 
 
 @orders_bp.route("/stats", methods=["GET"])
 @jwt_required()
 def get_order_stats():
     current_user_id_str = get_jwt_identity()
-    buyer = Buyer.query.filter_by(user_id=uuid.UUID(current_user_id_str)).first()
+    user_uuid = get_uuid(current_user_id_str)
+    if not user_uuid:
+        return jsonify({"error": "Invalid user ID format"}), 400
+
+    buyer = Buyer.query.filter_by(user_id=user_uuid).first()
     if not buyer:
         return jsonify({"total_orders": 0, "total_spent": 0}), 200
 
-    orders = Order.query.filter(Order.buyer_id == buyer.id, Order.status.notin_(["failed", "payment_pending"])).all()
+    orders = Order.query.filter(Order.buyer_id == buyer.id).all()
     return jsonify({
         "total_orders": len(orders),
         "total_spent": round(sum(float(o.total_amount) for o in orders), 2),
@@ -320,85 +516,77 @@ def get_order_stats():
 @jwt_required()
 def create_order_from_bargain():
     current_user_id_str = get_jwt_identity()
+    user_uuid = get_uuid(current_user_id_str)
+    if not user_uuid:
+        return jsonify({"error": "Invalid user ID format"}), 400
+
     data = request.get_json()
     phone = data.get("phone_number") or data.get("phone")
-    
-    # Format phone number
-    formatted_phone = MpesaService.format_phone_number(phone)
-    if not formatted_phone:
-        return jsonify({"message": "Invalid phone number format"}), 400
-    
-    buyer = Buyer.query.filter_by(user_id=uuid.UUID(current_user_id_str)).first()
-    bargain = BargainSession.query.get_or_404(data["bargain_id"])
-    animal = Animal.query.get(bargain.animal_id)
+
+    buyer = Buyer.query.filter_by(user_id=user_uuid).first()
+    if not buyer:
+        return jsonify({"message": "No buyer profile found"}), 404
+
+    bargain_id_str = data.get("bargain_id")
+    if bargain_id_str:
+        try:
+            bargain_id_int = int(bargain_id_str)
+        except ValueError:
+            return jsonify({"error": "Invalid bargain ID format"}), 400
+    else:
+        return jsonify({"error": "bargain_id is required"}), 400
+
+    bargain = BargainSession.query.filter_by(id=bargain_id_int).first()
+    if not bargain:
+        return jsonify({"error": "Bargain not found"}), 404
+
+    animal_uuid = get_uuid(bargain.animal_id)
+    if not animal_uuid:
+        return jsonify({"error": "Invalid animal ID"}), 400
+
+    animal = Animal.query.filter_by(id=animal_uuid).first()
+    if not animal:
+        return jsonify({"error": "Animal not found"}), 404
+
     agreed_price = bargain.final_price or bargain.initial_offer
 
     order = Order(
         buyer_id=buyer.id,
         farmer_id=animal.farmer_id,
         bargain_id=bargain.id,
-        items=[{"animal_id": animal.id, "name": animal.species, "price": float(agreed_price)}],
+        items=[
+            {
+                "animal_id": str(animal.id),
+                "name": animal.species,
+                "price": float(agreed_price),
+            }
+        ],
         total_amount=agreed_price,
         status="payment_pending",
-        payment_method="mpesa"
+        payment_method="mpesa",
     )
 
     db.session.add(order)
     db.session.commit()
 
+    mpesa_response = None
     try:
-        stk_response = MpesaService.stk_push(formatted_phone, int(float(agreed_price)), str(order.id))
-        if stk_response.get('ResponseCode') == '0':
-            order.checkout_id = stk_response.get('CheckoutRequestID')
+        stk_response = MpesaService.stk_push(
+            phone, int(float(agreed_price)), str(order.id)
+        )
+        if stk_response.get("ResponseCode") == "0":
+            order.checkout_id = stk_response.get("CheckoutRequestID")
             db.session.commit()
+            mpesa_response = stk_response
         else:
-            current_app.logger.error(f"Bargain Mpesa Error: {stk_response}")
+            current_app.logger.error(f"Mpesa Rejected: {stk_response}")
+            mpesa_response = stk_response
     except Exception as e:
         current_app.logger.error(f"Bargain Mpesa Error: {str(e)}")
+        mpesa_response = {"error": str(e)}
 
-    return jsonify({"message": "Bargain payment initiated", "order_id": order.id}), 201
-
-
-# ==========================================
-# DEBUG ENDPOINTS (For development only)
-# ==========================================
-
-@orders_bp.route("/debug/all", methods=["GET"])
-def debug_all_orders():
-    """Get all orders with payment_pending status - for debugging."""
-    from datetime import datetime, timedelta
-    
-    # Get recent pending orders (last 24 hours)
-    recent_orders = Order.query.filter(
-        Order.status == "payment_pending",
-        Order.created_at >= datetime.utcnow() - timedelta(hours=24)
-    ).all()
-    
     return jsonify({
-        "count": len(recent_orders),
-        "orders": [{
-            "id": str(o.id),
-            "status": o.status,
-            "total_amount": float(o.total_amount),
-            "checkout_id": o.checkout_id,
-            "created_at": o.created_at.isoformat() if o.created_at else None
-        } for o in recent_orders]
-    }), 200
-
-
-@orders_bp.route("/debug/checkout/<checkout_id>", methods=["GET"])
-def debug_checkout_status(checkout_id):
-    """Check order status by checkout_id - for debugging."""
-    order = Order.query.filter_by(checkout_id=checkout_id).first()
-    
-    if not order:
-        return jsonify({"error": "Order not found", "checkout_id": checkout_id}), 404
-    
-    return jsonify({
+        "message": "Bargain payment initiated",
         "order_id": str(order.id),
-        "status": order.status,
-        "payment_status": order.payment_status,
-        "checkout_id": order.checkout_id,
-        "total_amount": float(order.total_amount),
-        "created_at": order.created_at.isoformat() if order.created_at else None
-    }), 200
+        "mpesa_response": mpesa_response,
+    }), 201
