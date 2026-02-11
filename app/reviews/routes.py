@@ -168,6 +168,16 @@ except Exception as e:
         db.session.rollback()
         current_app.logger.error(f"Review creation failed: {str(e)}")
         return jsonify({"error": f"Failed to process review: {str(e)}"}), 500
+@reviews_bp.route("/farmer/<farmer_id>", methods=["GET"])
+def get_farmer_reviews(farmer_id):
+    """
+    Get all reviews for a specific farmer.
+    """
+    try:
+        farmer_uuid = uuid.UUID(farmer_id)
+    except ValueError:
+        return jsonify({"error": "Invalid farmer ID format"}), 400
+
 
 
 
