@@ -155,30 +155,37 @@ def get_all_disputes_admin():
                 if order:
                     dispute_dict["order_amount"] = float(order.total_amount)
                     dispute_dict["order_date"] = order.created_at.strftime("%Y-%m-%d") if order.created_at else None
-                    dispute_dict["item_details"] = order.items[0].get("name") if order.items else "Unknown"
+                    # Safely get item name from items array
+                    order_items = order.items if order.items else []
+                    dispute_dict["item_details"] = order_items[0].get("name", order_items[0].get("species", "Unknown")) if order_items else "Unknown"
                     
                     # Get buyer info
-                    buyer = Buyer.query.get(order.buyer_id)
-                    buyer_user = User.query.get(buyer.user_id) if buyer else None
-                    dispute_dict["buyer"] = {
-                        "name": buyer_user.full_name if buyer_user else "Unknown",
-                        "id": str(buyer_user.id) if buyer_user else None,
-                    }
+                    if order.buyer_id:
+                        buyer = Buyer.query.get(order.buyer_id)
+                        if buyer:
+                            buyer_user = User.query.get(buyer.user_id)
+                            dispute_dict["buyer"] = {
+                                "name": buyer_user.full_name if buyer_user else "Unknown",
+                                "id": str(buyer_user.id) if buyer_user else None,
+                            }
                     
                     # Get farmer info
-                    farmer = Farmer.query.get(order.farmer_id)
-                    farmer_user = User.query.get(farmer.user_id) if farmer else None
-                    dispute_dict["farmer"] = {
-                        "name": farmer_user.full_name if farmer_user else "Unknown",
-                        "id": str(farmer_user.id) if farmer_user else None,
-                    }
+                    if order.farmer_id:
+                        farmer = Farmer.query.get(order.farmer_id)
+                        if farmer:
+                            farmer_user = User.query.get(farmer.user_id)
+                            dispute_dict["farmer"] = {
+                                "name": farmer_user.full_name if farmer_user else "Unknown",
+                                "id": str(farmer_user.id) if farmer_user else None,
+                            }
             
             # Get filer info
-            filer = User.query.get(dispute.filer_id)
-            dispute_dict["filer"] = {
-                "name": filer.full_name if filer else "Unknown",
-                "email": filer.email if filer else None,
-            }
+            if dispute.filer_id:
+                filer = User.query.get(dispute.filer_id)
+                dispute_dict["filer"] = {
+                    "name": filer.full_name if filer else "Unknown",
+                    "email": filer.email if filer else None,
+                }
             
             disputes_data.append(dispute_dict)
         

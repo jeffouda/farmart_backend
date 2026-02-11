@@ -27,6 +27,12 @@ marshmallow>=3.0.0
 python-dateutil>=2.8.0
 six>=1.16.0
 
+# Image Upload
+cloudinary>=1.36.0
+
+# Production Server
+gunicorn>=21.2.0
+
 # Testing (optional)
 pytest>=7.0.0
 pytest-flask>=1.2.0
