@@ -36,14 +36,17 @@ def create_app(config_name="default"):
                     "http://127.0.0.1:5173",
                     "https://farmart-com.onrender.com"
                 ],
-                "methods": ["GET", "POST", "PUT", "DELETE", "OPTIONS"],
+                "methods": ["GET", "POST", "PUT", "DELETE", "OPTIONS", "PATCH"],
                 "allow_headers": [
                     "Content-Type",
                     "Authorization",
-                    "ngrok-skip-browser-warning"
+                    "ngrok-skip-browser-warning",
+                    "Accept",
+                    "Origin"
                 ],
                 "supports_credentials": True,
                 "expose_headers": ["Content-Type", "Authorization"],
+                "max_age": 86400,  # Cache preflight for 24 hours
             }
         },
     )
