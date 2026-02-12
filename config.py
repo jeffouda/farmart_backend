@@ -59,6 +59,12 @@ class Config:
     # Base URL for Webhook Callbacks (Ngrok or Production Domain)
     BASE_URL = os.environ.get('BASE_URL')
 
+    # CORS Allowed Origins
+    ALLOWED_ORIGINS = os.environ.get(
+        "ALLOWED_ORIGINS",
+        "http://localhost:3000,http://localhost:5173,https://farmart-com.onrender.com"
+    ).split(",")
+
 
 class DevelopmentConfig(Config):
     """Development configuration."""
