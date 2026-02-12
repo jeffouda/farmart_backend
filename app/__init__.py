@@ -1,5 +1,6 @@
 import os
 from flask import Flask, jsonify, send_from_directory
+from flask_cors import CORS
 from .models import db
 from flask_migrate import Migrate
 from flask_jwt_extended import JWTManager
@@ -23,6 +24,15 @@ def create_app(config_name="default"):
     db.init_app(app)
     migrate.init_app(app, db)
     jwt.init_app(app)
+
+    # Initialize CORS with allowed origins
+    CORS(app, resources={
+        r"/api/*": {
+            "origins": app_config.ALLOWED_ORIGINS,
+            "methods": ["GET", "POST", "PUT", "DELETE", "OPTIONS"],
+            "allow_headers": ["Content-Type", "Authorization"]
+        }
+    })
 
     # Register blueprints
     from app.auth import auth_bp
