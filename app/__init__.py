@@ -20,14 +20,13 @@ def create_app(config_name="default"):
     app_config = config.get(config_name, config["default"])
     app.config.from_object(app_config)
 
-
     # Initialize extensions
     db.init_app(app)
     migrate.init_app(app, db)
     jwt.init_app(app)
 
-    # Unified CORS configuration for API routes
-    # Allows localhost, ngrok URLs, and includes the ngrok-skip-browser-warning header
+    # Configure CORS - Single configuration for both dev and production
+    # Allow localhost for dev, and the Render frontend for production
     CORS(
         app,
         resources={
@@ -35,16 +34,19 @@ def create_app(config_name="default"):
                 "origins": [
                     "http://localhost:5173",
                     "http://127.0.0.1:5173",
+                    "https://farmart-com.onrender.com"
                 ],
                 "methods": ["GET", "POST", "PUT", "DELETE", "OPTIONS", "PATCH"],
                 "allow_headers": [
                     "Content-Type",
                     "Authorization",
                     "ngrok-skip-browser-warning",
-                    "Access-Control-Allow-Origin",
+                    "Accept",
+                    "Origin"
                 ],
-                "expose_headers": ["Content-Type", "Authorization"],
                 "supports_credentials": True,
+                "expose_headers": ["Content-Type", "Authorization"],
+                "max_age": 86400,  # Cache preflight for 24 hours
             }
         },
     )
