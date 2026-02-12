@@ -25,8 +25,13 @@ def create_app(config_name="default"):
     migrate.init_app(app, db)
     jwt.init_app(app)
 
+<<<<<<< HEAD
     # Configure CORS - Single configuration for both dev and production
     # Allow localhost for dev, and the Render frontend for production
+=======
+    # Unified CORS configuration for API routes
+    # Allows localhost, ngrok URLs, and includes the ngrok-skip-browser-warning header
+>>>>>>> origin
     CORS(
         app,
         resources={
@@ -34,19 +39,29 @@ def create_app(config_name="default"):
                 "origins": [
                     "http://localhost:5173",
                     "http://127.0.0.1:5173",
+<<<<<<< HEAD
                     "https://farmart-com.onrender.com"
+=======
+>>>>>>> origin
                 ],
                 "methods": ["GET", "POST", "PUT", "DELETE", "OPTIONS", "PATCH"],
                 "allow_headers": [
                     "Content-Type",
                     "Authorization",
                     "ngrok-skip-browser-warning",
+<<<<<<< HEAD
                     "Accept",
                     "Origin"
                 ],
                 "supports_credentials": True,
                 "expose_headers": ["Content-Type", "Authorization"],
                 "max_age": 86400,  # Cache preflight for 24 hours
+=======
+                    "Access-Control-Allow-Origin",
+                ],
+                "expose_headers": ["Content-Type", "Authorization"],
+                "supports_credentials": True,
+>>>>>>> origin
             }
         },
     )
