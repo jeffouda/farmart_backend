@@ -1,67 +1,49 @@
 import os
 from dotenv import load_dotenv
 
-# Load environment variables from .env file
 load_dotenv()
 
 class Config:
-    """Base configuration class."""
-
-    # Database configuration
     DATABASE_URL = os.environ.get("DATABASE_URL")
+    if DATABASE_URL and DATABASE_URL.startswith("postgres://"):
+        DATABASE_URL = DATABASE_URL.replace("postgres://", "postgresql://", 1)
     if not DATABASE_URL:
-        # Use SQLite for development if DATABASE_URL is not set
         DATABASE_URL = "sqlite:///farmart.db"
 
-    # JWT configuration
     JWT_SECRET_KEY = os.environ.get("JWT_SECRET_KEY", "dev-secret-key")
-    JWT_ACCESS_TOKEN_EXPIRES = int(os.environ.get(
-        "JWT_ACCESS_TOKEN_EXPIRES", 3600
-    ))  # Ensure it's an integer
-
-    # Flask configuration
+    JWT_ACCESS_TOKEN_EXPIRES = int(os.environ.get("JWT_ACCESS_TOKEN_EXPIRES", 3600))
     FLASK_APP = os.environ.get("FLASK_APP", "app.py")
     FLASK_ENV = os.environ.get("FLASK_ENV", "development")
-
-    # SQLAlchemy configuration
     SQLALCHEMY_DATABASE_URI = DATABASE_URL
     SQLALCHEMY_TRACK_MODIFICATIONS = False
-    SQLALCHEMY_ENGINE_OPTIONS = {
-        "pool_pre_ping": True,
-        "pool_recycle": 300,
-    }
-
-    # ==========================================
-    # M-PESA CONFIGURATION (Daraja API)
-    # ==========================================
+    SQLALCHEMY_ENGINE_OPTIONS = {"pool_pre_ping": True, "pool_recycle": 300, "pool_size": 10, "max_overflow": 20}
     MPESA_CONSUMER_KEY = os.environ.get('MPESA_CONSUMER_KEY')
     MPESA_CONSUMER_SECRET = os.environ.get('MPESA_CONSUMER_SECRET')
     MPESA_SHORTCODE = os.environ.get('MPESA_SHORTCODE')
     MPESA_PASSKEY = os.environ.get('MPESA_PASSKEY')
-    
-    # B2C Credentials (for Farmer Payouts)
     MPESA_INITIATOR_NAME = os.environ.get('MPESA_INITIATOR_NAME')
     MPESA_SECURITY_CREDENTIAL = os.environ.get('MPESA_SECURITY_CREDENTIAL')
-    
-    # Base URL for Webhook Callbacks (Ngrok or Production Domain)
     BASE_URL = os.environ.get('BASE_URL')
 
-
 class DevelopmentConfig(Config):
-    """Development configuration."""
     FLASK_ENV = "development"
     DEBUG = True
 
-
 class ProductionConfig(Config):
-    """Production configuration."""
     FLASK_ENV = "production"
     DEBUG = False
+    TESTING = False
+    JWT_SECRET_KEY = os.environ.get("JWT_SECRET_KEY")
+    if not JWT_SECRET_KEY or JWT_SECRET_KEY == "dev-secret-key":
+        raise ValueError("JWT_SECRET_KEY must be set in production")
+    if not os.environ.get("DATABASE_URL"):
+        raise ValueError("DATABASE_URL must be set in production")
+    SESSION_COOKIE_SECURE = True
+    SESSION_COOKIE_HTTPONLY = True
+    SESSION_COOKIE_SAMESITE = 'Lax'
+    PERMANENT_SESSION_LIFETIME = 3600
+    FRONTEND_URL = os.environ.get("FRONTEND_URL")
+    if not FRONTEND_URL:
+        raise ValueError("FRONTEND_URL must be set in production")
 
-
-# Configuration mapping
-config = {
-    "development": DevelopmentConfig,
-    "production": ProductionConfig,
-    "default": DevelopmentConfig,
-}
+config = {"development": DevelopmentConfig, "production": ProductionConfig, "default": DevelopmentConfig}
