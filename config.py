@@ -9,6 +9,19 @@ class Config:
 
     # Database configuration
     DATABASE_URL = os.environ.get("DATABASE_URL")
+    if DATABASE_URL and DATABASE_URL.startswith("postgres://"):
+        DATABASE_URL = DATABASE_URL.replace(
+            "postgres://", "postgresql://", 1
+        )
+    # Ensure port 5432 for Render PostgreSQL
+    if DATABASE_URL and "@" in DATABASE_URL and ":5432" not in DATABASE_URL:
+        parts = DATABASE_URL.split("@")
+        if len(parts) == 2:
+            before_at, after_at = parts
+            host_db = after_at.split("/")
+            if len(host_db) == 2:
+                host, db = host_db
+                DATABASE_URL = f"{before_at}@{host}:5432/{db}"
     if not DATABASE_URL:
         # Use SQLite for development if DATABASE_URL is not set
         DATABASE_URL = "sqlite:///farmart.db"

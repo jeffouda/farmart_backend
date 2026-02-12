@@ -1,6 +1,5 @@
 import os
 from flask import Flask, jsonify, send_from_directory
-from flask_cors import CORS
 from .models import db
 from flask_migrate import Migrate
 from flask_jwt_extended import JWTManager
@@ -24,32 +23,6 @@ def create_app(config_name="default"):
     db.init_app(app)
     migrate.init_app(app, db)
     jwt.init_app(app)
-
-    # Configure CORS - Single configuration for both dev and production
-    # Allow localhost for dev, and the Render frontend for production
-    CORS(
-        app,
-        resources={
-            r"/api/*": {
-                "origins": [
-                    "http://localhost:5173",
-                    "http://127.0.0.1:5173",
-                    "https://farmart-com.onrender.com"
-                ],
-                "methods": ["GET", "POST", "PUT", "DELETE", "OPTIONS", "PATCH"],
-                "allow_headers": [
-                    "Content-Type",
-                    "Authorization",
-                    "ngrok-skip-browser-warning",
-                    "Accept",
-                    "Origin"
-                ],
-                "supports_credentials": True,
-                "expose_headers": ["Content-Type", "Authorization"],
-                "max_age": 86400,  # Cache preflight for 24 hours
-            }
-        },
-    )
 
     # Register blueprints
     from app.auth import auth_bp

@@ -1,12 +1,17 @@
 # app.py
 from app import create_app
+from flask_cors import CORS
 import os
 
 # app instance using the factory
 app = create_app()
 
-# Note: CORS is now configured in the create_app() factory in app/__init__.py
-# Do not add additional CORS configuration here to avoid conflicts
+# Configure CORS
+CORS(
+    app,
+    supports_credentials=True,
+    resources={r"/api/*": {"origins": "*"}}
+)
 
 
 # Serve static files for uploaded images
