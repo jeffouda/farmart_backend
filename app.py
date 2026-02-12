@@ -10,7 +10,7 @@ app = create_app()
 CORS(
     app,
     supports_credentials=True,
-    resources={r"/api/*": {"origins": "*"}}
+    resources={r"/api/*": {"origins": app.config['ALLOWED_ORIGINS']}}
 )
 
 
