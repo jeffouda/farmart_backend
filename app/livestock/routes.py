@@ -276,7 +276,12 @@ def list_animals():
     sort_by = request.args.get('sort', 'newest')
 
     # 2. Base Query: Only show 'available' animals to the public
-    query = Animal.query.filter(Animal.status.ilike("available"))
+    show_sold = request.args.get('show_sold', 'false').lower() == 'true'
+    
+    if show_sold:
+        query = Animal.query  # Show all animals
+    else:
+        query = Animal.query.filter(Animal.status.ilike("available"))
 
     # 3. Apply Filters
     if search_query:
@@ -403,7 +408,12 @@ def get_livestock():
         sort = request.args.get("sort", "newest")
 
         # Build query
-        query = Animal.query.filter(Animal.status.ilike("available"))
+        show_sold = request.args.get("show_sold", "false").lower() == "true"
+        
+        if show_sold:
+            query = Animal.query  # Show all animals
+        else:
+            query = Animal.query.filter(Animal.status.ilike("available"))
 
         # Search filter
         if search:
