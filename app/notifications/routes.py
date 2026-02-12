@@ -6,7 +6,7 @@ from app.models import create_notification
 notifications_bp = Blueprint('notifications', __name__)
 
 
-@notifications_bp.route('/notifications', methods=['GET'])
+@notifications_bp.route('/', methods=['GET'])
 @jwt_required()
 def get_notifications():
     """Get all notifications for the current user"""
@@ -42,7 +42,7 @@ def get_notifications():
         return jsonify({'error': str(e)}), 500
 
 
-@notifications_bp.route('/notifications/unread-count', methods=['GET'])
+@notifications_bp.route('/unread-count', methods=['GET'])
 @jwt_required()
 def get_unread_count():
     """Get the count of unread notifications"""
@@ -54,7 +54,7 @@ def get_unread_count():
         return jsonify({'error': str(e)}), 500
 
 
-@notifications_bp.route('/notifications/<int:notification_id>/read', methods=['PUT'])
+@notifications_bp.route('/<int:notification_id>/read', methods=['PUT'])
 @jwt_required()
 def mark_notification_read(notification_id):
     """Mark a single notification as read"""
@@ -77,7 +77,7 @@ def mark_notification_read(notification_id):
         return jsonify({'error': str(e)}), 500
 
 
-@notifications_bp.route('/notifications/read-all', methods=['PUT'])
+@notifications_bp.route('/read-all', methods=['PUT'])
 @jwt_required()
 def mark_all_read():
     """Mark all notifications as read for the current user"""
@@ -94,7 +94,7 @@ def mark_all_read():
         return jsonify({'error': str(e)}), 500
 
 
-@notifications_bp.route('/notifications/<int:notification_id>', methods=['DELETE'])
+@notifications_bp.route('/<int:notification_id>', methods=['DELETE'])
 @jwt_required()
 def delete_notification(notification_id):
     """Delete a notification"""

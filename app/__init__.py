@@ -1,5 +1,6 @@
 import os
 from flask import Flask, jsonify, send_from_directory
+from flask_cors import CORS
 from .models import db
 from flask_migrate import Migrate
 from flask_jwt_extended import JWTManager
@@ -24,6 +25,32 @@ def create_app(config_name="default"):
     migrate.init_app(app, db)
     jwt.init_app(app)
 
+    # Configure CORS - Single configuration for both dev and production
+    # Allow localhost for dev, and the Render frontend for production
+    CORS(
+        app,
+        resources={
+            r"/api/*": {
+                "origins": [
+                    "http://localhost:5173",
+                    "http://127.0.0.1:5173",
+                    "https://farmart-com.onrender.com",
+                ],
+                "methods": ["GET", "POST", "PUT", "DELETE", "OPTIONS", "PATCH"],
+                "allow_headers": [
+                    "Content-Type",
+                    "Authorization",
+                    "ngrok-skip-browser-warning",
+                    "Accept",
+                    "Origin",
+                ],
+                "supports_credentials": True,
+                "expose_headers": ["Content-Type", "Authorization"],
+                "max_age": 86400,  # Cache preflight for 24 hours
+            }
+        },
+    )
+
     # Register blueprints
     from app.auth import auth_bp
     from app.orders import orders_bp
@@ -36,6 +63,7 @@ def create_app(config_name="default"):
     from app.negotiation import negotiation_bp
     from app.payments import payment_bp
     from app.notifications import notifications_bp
+    from app.admin import admin_bp
 
     app.register_blueprint(auth_bp, url_prefix="/api/auth")
     app.register_blueprint(orders_bp, url_prefix="/api/orders")
@@ -47,7 +75,8 @@ def create_app(config_name="default"):
     app.register_blueprint(analytics_bp, url_prefix="/api/analytics")
     app.register_blueprint(negotiation_bp, url_prefix="/api/negotiation")
     app.register_blueprint(payment_bp, url_prefix="/api/payments")
-    app.register_blueprint(notifications_bp, url_prefix="/api")
+    app.register_blueprint(notifications_bp, url_prefix="/api/notifications")
+    app.register_blueprint(admin_bp, url_prefix="/api/admin")
 
     # Serve uploaded images
     uploads_dir = os.path.join(os.getcwd(), "uploads")
@@ -70,8 +99,6 @@ def create_app(config_name="default"):
     def health_check():
         return jsonify({"status": "online", "message": "System is healthy"}), 200
 
-
-
     # Root endpoint - API info
     @app.route("/", methods=["GET"])
     def root():
@@ -93,6 +120,5 @@ def create_app(config_name="default"):
                 "payments": "/api/payments/",
             },
         }), 200
-
 
     return app
