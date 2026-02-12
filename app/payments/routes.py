@@ -72,14 +72,20 @@ def check_order_status(checkout_id):
     """
     Frontend polls this to see if the callback has created the Order yet.
     """
+    # Check if an order has been created with this checkout ID
     order = Order.query.filter_by(checkout_id=checkout_id).first()
     if order:
         return jsonify({
-            "status": order.status,
+            "status": "paid",
             "order_id": order.id,
             "payment_status": "paid"
         }), 200
     
+    # Check if the pending record marked it as failed
+    pending = PendingCheckout.query.filter_by(checkout_id=checkout_id).first()
+    if pending and pending.status == "failed":
+        return jsonify({"status": "failed"}), 200
+        
     return jsonify({"status": "pending"}), 200
 
 
@@ -87,28 +93,30 @@ def check_order_status(checkout_id):
 @jwt_required()
 def confirm_and_release(order_id):
     """
-    UPDATED: Matches frontend call /api/payments/confirm-receipt/<id>
-    This triggers the Escrow release (B2C Payout to Farmer).
+    Triggers the Escrow release (B2C Payout to Farmer).
+    Captures ConversationID to track the asynchronous response from Safaricom.
     """
     order = Order.query.get_or_404(order_id)
     
-    # Ensure funds are currently held
+    # Ensure funds are currently held and not already being processed
     escrow = EscrowRecord.query.filter_by(order_id=order_id, status="held").first()
 
     if not escrow:
-        return jsonify({"error": "No funds in escrow or already released"}), 404
+        return jsonify({"error": "No funds in escrow or already released/processing"}), 404
 
     # Execute M-Pesa B2C Payout
     response = MpesaService.initiate_b2c(escrow.seller_phone, escrow.amount, str(order.id))
     
     if response.get('ResponseCode') == '0':
-        # Update records
-        escrow.status = "completed"
-        order.status = "completed"
+        # IMPORTANT: Capture ConversationID so the callback can find this record
+        escrow.b2c_conversation_id = response.get('ConversationID')
+        escrow.status = "releasing" # Interim status while waiting for callback
         db.session.commit()
-        return jsonify({"message": "Success! Funds released to farmer."}), 200
+        
+        current_app.logger.info(f"B2C Payout Initiated for Order {order_id}. CID: {escrow.b2c_conversation_id}")
+        return jsonify({"message": "Payout initiated. Waiting for Safaricom confirmation."}), 200
 
-    current_app.logger.error(f"B2C Payout Failed: {response}")
+    current_app.logger.error(f"B2C Payout Initiation Failed: {response}")
     return jsonify({"error": "Payout initiation failed", "details": response}), 400
 
 
@@ -136,10 +144,11 @@ def mpesa_stk_callback():
             current_app.logger.error(f"No Pending record for {checkout_id}")
             return jsonify({"ResultCode": 0, "ResultDesc": "Accepted"}), 200
 
-        # 2. If Payment Failed
+        # 2. If Payment Failed (ResultCode != 0)
         if result_code != 0:
             pending.status = "failed"
             db.session.commit()
+            current_app.logger.warning(f"Payment failed for CheckoutID: {checkout_id}")
             return jsonify({"ResultCode": 0, "ResultDesc": "Accepted"}), 200
 
         # 3. Payment SUCCESS - Extract Metadata
@@ -191,25 +200,33 @@ def mpesa_stk_callback():
 
 @payment_bp.route('/callback/b2c', methods=['POST'])
 def mpesa_b2c_callback():
+    """
+    Final confirmation of the payout to the farmer.
+    """
     payload = request.get_json()
     result = payload.get('Result', {})
     result_code = result.get('ResultCode')
     conversation_id = result.get('ConversationID')
 
-    # Find the record to update its status based on Safaricom's final word
+    # Find the escrow record using the ConversationID captured during initiation
     escrow = EscrowRecord.query.filter_by(b2c_conversation_id=conversation_id).first()
 
+    if not escrow:
+        current_app.logger.error(f"B2C Callback received for unknown ConversationID: {conversation_id}")
+        return jsonify({"ResultCode": 0, "ResultDesc": "Accepted"}), 200
+
     if result_code == 0:
-        current_app.logger.info("✅ B2C Payout Success.")
-        if escrow:
-            escrow.status = "released"
+        current_app.logger.info(f"✅ B2C Payout Success for Escrow {escrow.id}")
+        escrow.status = "released"
+        # Update the associated order status to fully completed
+        order = Order.query.get(escrow.order_id)
+        if order:
+            order.status = "completed"
     else:
-        # This is where your 2040 error will be caught
+        # Catch errors like 2040 (Insufficient funds in your shortcode)
         error_msg = result.get('ResultDesc')
-        current_app.logger.error(f"❌ B2C Payout Failed: {error_msg}")
-        if escrow:
-            escrow.status = "held" # Revert to held so you can try again
-            # Optionally revert order status too
+        current_app.logger.error(f"❌ B2C Payout Failed for CID {conversation_id}: {error_msg}")
+        escrow.status = "held" # Revert to 'held' so the admin/system can retry
     
     db.session.commit()
     return jsonify({"ResultCode": 0, "ResultDesc": "Accepted"}), 200
