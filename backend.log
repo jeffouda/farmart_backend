@@ -1,4 +1,152 @@
+[2026-02-12 04:43:25,719] INFO in logging_config: FarmArt application startup
+2026-02-12 04:43:25,719 - app - INFO - FarmArt application startup
+2026-02-12 04:43:25,719 - app - INFO - FarmArt application startup
  * Serving Flask app 'app'
  * Debug mode: on
-Address already in use
-Port 5000 is in use by another program. Either identify and stop that program, or start the server with a different port.
+2026-02-12 04:43:25,879 - werkzeug - INFO - [31m[1mWARNING: This is a development server. Do not use it in a production deployment. Use a production WSGI server instead.[0m
+ * Running on http://127.0.0.1:5000
+2026-02-12 04:43:25,880 - werkzeug - INFO - [33mPress CTRL+C to quit[0m
+2026-02-12 04:43:25,880 - werkzeug - INFO -  * Restarting with stat
+[2026-02-12 04:43:26,429] INFO in logging_config: FarmArt application startup
+2026-02-12 04:43:26,429 - app - INFO - FarmArt application startup
+2026-02-12 04:43:26,429 - app - INFO - FarmArt application startup
+2026-02-12 04:43:26,574 - werkzeug - WARNING -  * Debugger is active!
+2026-02-12 04:43:26,575 - werkzeug - INFO -  * Debugger PIN: 137-281-635
+2026-02-12 04:43:29,021 - werkzeug - INFO - 127.0.0.1 - - [12/Feb/2026 04:43:29] "GET /api/health HTTP/1.1" 200 -
+2026-02-12 04:43:29,043 - werkzeug - INFO - 127.0.0.1 - - [12/Feb/2026 04:43:29] "GET / HTTP/1.1" 200 -
+2026-02-12 04:44:07,147 - werkzeug - INFO - 127.0.0.1 - - [12/Feb/2026 04:44:07] "[31m[1mPOST /api/auth/login HTTP/1.1[0m" 401 -
+2026-02-12 04:46:00,540 - werkzeug - INFO - 127.0.0.1 - - [12/Feb/2026 04:46:00] "OPTIONS /api/wishlist/ HTTP/1.1" 200 -
+2026-02-12 04:46:00,544 - werkzeug - INFO - 127.0.0.1 - - [12/Feb/2026 04:46:00] "OPTIONS /api/orders/ HTTP/1.1" 200 -
+2026-02-12 04:46:00,547 - werkzeug - INFO - 127.0.0.1 - - [12/Feb/2026 04:46:00] "[33mOPTIONS /api/notifications HTTP/1.1[0m" 404 -
+2026-02-12 04:46:00,548 - werkzeug - INFO - 127.0.0.1 - - [12/Feb/2026 04:46:00] "OPTIONS /api/auth/me HTTP/1.1" 200 -
+2026-02-12 04:46:00,550 - werkzeug - INFO - 127.0.0.1 - - [12/Feb/2026 04:46:00] "OPTIONS /api/wishlist/ HTTP/1.1" 200 -
+2026-02-12 04:46:00,550 - werkzeug - INFO - 127.0.0.1 - - [12/Feb/2026 04:46:00] "OPTIONS /api/orders/ HTTP/1.1" 200 -
+2026-02-12 04:46:00,552 - werkzeug - INFO - 127.0.0.1 - - [12/Feb/2026 04:46:00] "[33mOPTIONS /api/notifications HTTP/1.1[0m" 404 -
+2026-02-12 04:46:00,568 - werkzeug - INFO - 127.0.0.1 - - [12/Feb/2026 04:46:00] "OPTIONS /api/auth/me HTTP/1.1" 200 -
+2026-02-12 04:46:00,593 - werkzeug - INFO - 127.0.0.1 - - [12/Feb/2026 04:46:00] "GET /api/wishlist/ HTTP/1.1" 200 -
+2026-02-12 04:46:00,626 - werkzeug - INFO - 127.0.0.1 - - [12/Feb/2026 04:46:00] "GET /api/auth/me HTTP/1.1" 200 -
+2026-02-12 04:46:00,627 - werkzeug - INFO - 127.0.0.1 - - [12/Feb/2026 04:46:00] "GET /api/orders/ HTTP/1.1" 200 -
+2026-02-12 04:46:00,636 - werkzeug - INFO - 127.0.0.1 - - [12/Feb/2026 04:46:00] "GET /api/wishlist/ HTTP/1.1" 200 -
+2026-02-12 04:46:00,655 - werkzeug - INFO - 127.0.0.1 - - [12/Feb/2026 04:46:00] "GET /api/orders/ HTTP/1.1" 200 -
+2026-02-12 04:46:00,666 - werkzeug - INFO - 127.0.0.1 - - [12/Feb/2026 04:46:00] "GET /api/auth/me HTTP/1.1" 200 -
+2026-02-12 04:46:28,721 - werkzeug - INFO - 127.0.0.1 - - [12/Feb/2026 04:46:28] "OPTIONS /api/auth/login HTTP/1.1" 200 -
+2026-02-12 04:46:28,842 - werkzeug - INFO - 127.0.0.1 - - [12/Feb/2026 04:46:28] "POST /api/auth/login HTTP/1.1" 200 -
+2026-02-12 04:46:28,890 - werkzeug - INFO - 127.0.0.1 - - [12/Feb/2026 04:46:28] "OPTIONS /api/wishlist/ HTTP/1.1" 200 -
+2026-02-12 04:46:28,894 - werkzeug - INFO - 127.0.0.1 - - [12/Feb/2026 04:46:28] "OPTIONS /api/orders/ HTTP/1.1" 200 -
+2026-02-12 04:46:28,898 - werkzeug - INFO - 127.0.0.1 - - [12/Feb/2026 04:46:28] "[33mOPTIONS /api/notifications HTTP/1.1[0m" 404 -
+2026-02-12 04:46:28,901 - werkzeug - INFO - 127.0.0.1 - - [12/Feb/2026 04:46:28] "OPTIONS /api/auth/me HTTP/1.1" 200 -
+2026-02-12 04:46:28,918 - werkzeug - INFO - 127.0.0.1 - - [12/Feb/2026 04:46:28] "GET /api/wishlist/ HTTP/1.1" 200 -
+2026-02-12 04:46:28,925 - werkzeug - INFO - 127.0.0.1 - - [12/Feb/2026 04:46:28] "GET /api/orders/ HTTP/1.1" 200 -
+2026-02-12 04:46:28,934 - werkzeug - INFO - 127.0.0.1 - - [12/Feb/2026 04:46:28] "GET /api/auth/me HTTP/1.1" 200 -
+2026-02-12 04:46:28,983 - werkzeug - INFO - 127.0.0.1 - - [12/Feb/2026 04:46:28] "[33mOPTIONS /api/admin/stats HTTP/1.1[0m" 404 -
+2026-02-12 04:46:28,993 - werkzeug - INFO - 127.0.0.1 - - [12/Feb/2026 04:46:28] "[33mOPTIONS /api/admin/stats HTTP/1.1[0m" 404 -
+2026-02-12 04:46:28,996 - werkzeug - INFO - 127.0.0.1 - - [12/Feb/2026 04:46:28] "[33mOPTIONS /api/notifications HTTP/1.1[0m" 404 -
+2026-02-12 04:46:29,005 - werkzeug - INFO - 127.0.0.1 - - [12/Feb/2026 04:46:29] "GET /api/wishlist/ HTTP/1.1" 200 -
+2026-02-12 04:46:29,010 - werkzeug - INFO - 127.0.0.1 - - [12/Feb/2026 04:46:29] "GET /api/orders/ HTTP/1.1" 200 -
+2026-02-12 04:46:38,977 - werkzeug - INFO - 127.0.0.1 - - [12/Feb/2026 04:46:38] "[33mOPTIONS /api/notifications/unread-count HTTP/1.1[0m" 404 -
+2026-02-12 04:46:48,982 - werkzeug - INFO - 127.0.0.1 - - [12/Feb/2026 04:46:48] "[33mOPTIONS /api/notifications/unread-count HTTP/1.1[0m" 404 -
+2026-02-12 04:46:58,983 - werkzeug - INFO - 127.0.0.1 - - [12/Feb/2026 04:46:58] "[33mOPTIONS /api/notifications/unread-count HTTP/1.1[0m" 404 -
+2026-02-12 04:47:08,983 - werkzeug - INFO - 127.0.0.1 - - [12/Feb/2026 04:47:08] "[33mOPTIONS /api/notifications/unread-count HTTP/1.1[0m" 404 -
+2026-02-12 04:47:18,983 - werkzeug - INFO - 127.0.0.1 - - [12/Feb/2026 04:47:18] "[33mOPTIONS /api/notifications/unread-count HTTP/1.1[0m" 404 -
+2026-02-12 04:47:29,058 - werkzeug - INFO - 127.0.0.1 - - [12/Feb/2026 04:47:29] "[33mOPTIONS /api/notifications/unread-count HTTP/1.1[0m" 404 -
+2026-02-12 04:47:39,049 - werkzeug - INFO - 127.0.0.1 - - [12/Feb/2026 04:47:39] "[33mOPTIONS /api/notifications/unread-count HTTP/1.1[0m" 404 -
+2026-02-12 04:47:49,048 - werkzeug - INFO - 127.0.0.1 - - [12/Feb/2026 04:47:49] "[33mOPTIONS /api/notifications/unread-count HTTP/1.1[0m" 404 -
+2026-02-12 04:47:59,048 - werkzeug - INFO - 127.0.0.1 - - [12/Feb/2026 04:47:59] "[33mOPTIONS /api/notifications/unread-count HTTP/1.1[0m" 404 -
+2026-02-12 04:48:09,049 - werkzeug - INFO - 127.0.0.1 - - [12/Feb/2026 04:48:09] "[33mOPTIONS /api/notifications/unread-count HTTP/1.1[0m" 404 -
+2026-02-12 04:48:19,052 - werkzeug - INFO - 127.0.0.1 - - [12/Feb/2026 04:48:19] "[33mOPTIONS /api/notifications/unread-count HTTP/1.1[0m" 404 -
+2026-02-12 04:49:08,056 - werkzeug - INFO - 127.0.0.1 - - [12/Feb/2026 04:49:08] "[33mOPTIONS /api/notifications/unread-count HTTP/1.1[0m" 404 -
+2026-02-12 04:50:08,052 - werkzeug - INFO - 127.0.0.1 - - [12/Feb/2026 04:50:08] "[33mOPTIONS /api/notifications/unread-count HTTP/1.1[0m" 404 -
+2026-02-12 04:51:08,078 - werkzeug - INFO - 127.0.0.1 - - [12/Feb/2026 04:51:08] "[33mOPTIONS /api/notifications/unread-count HTTP/1.1[0m" 404 -
+2026-02-12 04:52:08,058 - werkzeug - INFO - 127.0.0.1 - - [12/Feb/2026 04:52:08] "[33mOPTIONS /api/notifications/unread-count HTTP/1.1[0m" 404 -
+2026-02-12 04:53:08,054 - werkzeug - INFO - 127.0.0.1 - - [12/Feb/2026 04:53:08] "[33mOPTIONS /api/notifications/unread-count HTTP/1.1[0m" 404 -
+2026-02-12 04:54:08,054 - werkzeug - INFO - 127.0.0.1 - - [12/Feb/2026 04:54:08] "[33mOPTIONS /api/notifications/unread-count HTTP/1.1[0m" 404 -
+2026-02-12 04:55:08,059 - werkzeug - INFO - 127.0.0.1 - - [12/Feb/2026 04:55:08] "[33mOPTIONS /api/notifications/unread-count HTTP/1.1[0m" 404 -
+2026-02-12 04:56:08,050 - werkzeug - INFO - 127.0.0.1 - - [12/Feb/2026 04:56:08] "[33mOPTIONS /api/notifications/unread-count HTTP/1.1[0m" 404 -
+2026-02-12 04:57:08,136 - werkzeug - INFO - 127.0.0.1 - - [12/Feb/2026 04:57:08] "[33mOPTIONS /api/notifications/unread-count HTTP/1.1[0m" 404 -
+2026-02-12 04:58:08,060 - werkzeug - INFO - 127.0.0.1 - - [12/Feb/2026 04:58:08] "[33mOPTIONS /api/notifications/unread-count HTTP/1.1[0m" 404 -
+2026-02-12 04:59:08,058 - werkzeug - INFO - 127.0.0.1 - - [12/Feb/2026 04:59:08] "[33mOPTIONS /api/notifications/unread-count HTTP/1.1[0m" 404 -
+2026-02-12 05:00:08,057 - werkzeug - INFO - 127.0.0.1 - - [12/Feb/2026 05:00:08] "[33mOPTIONS /api/notifications/unread-count HTTP/1.1[0m" 404 -
+2026-02-12 05:01:08,057 - werkzeug - INFO - 127.0.0.1 - - [12/Feb/2026 05:01:08] "[33mOPTIONS /api/notifications/unread-count HTTP/1.1[0m" 404 -
+2026-02-12 05:02:08,057 - werkzeug - INFO - 127.0.0.1 - - [12/Feb/2026 05:02:08] "[33mOPTIONS /api/notifications/unread-count HTTP/1.1[0m" 404 -
+2026-02-12 05:03:08,063 - werkzeug - INFO - 127.0.0.1 - - [12/Feb/2026 05:03:08] "[33mOPTIONS /api/notifications/unread-count HTTP/1.1[0m" 404 -
+2026-02-12 05:04:08,059 - werkzeug - INFO - 127.0.0.1 - - [12/Feb/2026 05:04:08] "[33mOPTIONS /api/notifications/unread-count HTTP/1.1[0m" 404 -
+2026-02-12 05:05:08,057 - werkzeug - INFO - 127.0.0.1 - - [12/Feb/2026 05:05:08] "[33mOPTIONS /api/notifications/unread-count HTTP/1.1[0m" 404 -
+2026-02-12 05:06:08,052 - werkzeug - INFO - 127.0.0.1 - - [12/Feb/2026 05:06:08] "[33mOPTIONS /api/notifications/unread-count HTTP/1.1[0m" 404 -
+2026-02-12 05:07:08,052 - werkzeug - INFO - 127.0.0.1 - - [12/Feb/2026 05:07:08] "[33mOPTIONS /api/notifications/unread-count HTTP/1.1[0m" 404 -
+2026-02-12 05:08:08,053 - werkzeug - INFO - 127.0.0.1 - - [12/Feb/2026 05:08:08] "[33mOPTIONS /api/notifications/unread-count HTTP/1.1[0m" 404 -
+2026-02-12 05:09:08,059 - werkzeug - INFO - 127.0.0.1 - - [12/Feb/2026 05:09:08] "[33mOPTIONS /api/notifications/unread-count HTTP/1.1[0m" 404 -
+2026-02-12 05:10:08,056 - werkzeug - INFO - 127.0.0.1 - - [12/Feb/2026 05:10:08] "[33mOPTIONS /api/notifications/unread-count HTTP/1.1[0m" 404 -
+2026-02-12 05:11:08,051 - werkzeug - INFO - 127.0.0.1 - - [12/Feb/2026 05:11:08] "[33mOPTIONS /api/notifications/unread-count HTTP/1.1[0m" 404 -
+2026-02-12 05:12:08,050 - werkzeug - INFO - 127.0.0.1 - - [12/Feb/2026 05:12:08] "[33mOPTIONS /api/notifications/unread-count HTTP/1.1[0m" 404 -
+2026-02-12 05:13:08,055 - werkzeug - INFO - 127.0.0.1 - - [12/Feb/2026 05:13:08] "[33mOPTIONS /api/notifications/unread-count HTTP/1.1[0m" 404 -
+2026-02-12 05:14:08,052 - werkzeug - INFO - 127.0.0.1 - - [12/Feb/2026 05:14:08] "[33mOPTIONS /api/notifications/unread-count HTTP/1.1[0m" 404 -
+2026-02-12 05:15:08,055 - werkzeug - INFO - 127.0.0.1 - - [12/Feb/2026 05:15:08] "[33mOPTIONS /api/notifications/unread-count HTTP/1.1[0m" 404 -
+2026-02-12 05:16:08,053 - werkzeug - INFO - 127.0.0.1 - - [12/Feb/2026 05:16:08] "[33mOPTIONS /api/notifications/unread-count HTTP/1.1[0m" 404 -
+2026-02-12 05:17:08,052 - werkzeug - INFO - 127.0.0.1 - - [12/Feb/2026 05:17:08] "[33mOPTIONS /api/notifications/unread-count HTTP/1.1[0m" 404 -
+2026-02-12 05:18:08,057 - werkzeug - INFO - 127.0.0.1 - - [12/Feb/2026 05:18:08] "[33mOPTIONS /api/notifications/unread-count HTTP/1.1[0m" 404 -
+2026-02-12 05:19:08,053 - werkzeug - INFO - 127.0.0.1 - - [12/Feb/2026 05:19:08] "[33mOPTIONS /api/notifications/unread-count HTTP/1.1[0m" 404 -
+2026-02-12 05:20:08,052 - werkzeug - INFO - 127.0.0.1 - - [12/Feb/2026 05:20:08] "[33mOPTIONS /api/notifications/unread-count HTTP/1.1[0m" 404 -
+2026-02-12 05:21:08,056 - werkzeug - INFO - 127.0.0.1 - - [12/Feb/2026 05:21:08] "[33mOPTIONS /api/notifications/unread-count HTTP/1.1[0m" 404 -
+2026-02-12 05:22:08,051 - werkzeug - INFO - 127.0.0.1 - - [12/Feb/2026 05:22:08] "[33mOPTIONS /api/notifications/unread-count HTTP/1.1[0m" 404 -
+2026-02-12 05:23:08,052 - werkzeug - INFO - 127.0.0.1 - - [12/Feb/2026 05:23:08] "[33mOPTIONS /api/notifications/unread-count HTTP/1.1[0m" 404 -
+2026-02-12 05:24:08,054 - werkzeug - INFO - 127.0.0.1 - - [12/Feb/2026 05:24:08] "[33mOPTIONS /api/notifications/unread-count HTTP/1.1[0m" 404 -
+2026-02-12 05:25:08,052 - werkzeug - INFO - 127.0.0.1 - - [12/Feb/2026 05:25:08] "[33mOPTIONS /api/notifications/unread-count HTTP/1.1[0m" 404 -
+2026-02-12 05:26:08,052 - werkzeug - INFO - 127.0.0.1 - - [12/Feb/2026 05:26:08] "[33mOPTIONS /api/notifications/unread-count HTTP/1.1[0m" 404 -
+2026-02-12 05:27:08,057 - werkzeug - INFO - 127.0.0.1 - - [12/Feb/2026 05:27:08] "[33mOPTIONS /api/notifications/unread-count HTTP/1.1[0m" 404 -
+2026-02-12 05:28:08,053 - werkzeug - INFO - 127.0.0.1 - - [12/Feb/2026 05:28:08] "[33mOPTIONS /api/notifications/unread-count HTTP/1.1[0m" 404 -
+2026-02-12 05:29:08,056 - werkzeug - INFO - 127.0.0.1 - - [12/Feb/2026 05:29:08] "[33mOPTIONS /api/notifications/unread-count HTTP/1.1[0m" 404 -
+2026-02-12 05:30:08,053 - werkzeug - INFO - 127.0.0.1 - - [12/Feb/2026 05:30:08] "[33mOPTIONS /api/notifications/unread-count HTTP/1.1[0m" 404 -
+2026-02-12 05:31:08,052 - werkzeug - INFO - 127.0.0.1 - - [12/Feb/2026 05:31:08] "[33mOPTIONS /api/notifications/unread-count HTTP/1.1[0m" 404 -
+2026-02-12 05:32:08,052 - werkzeug - INFO - 127.0.0.1 - - [12/Feb/2026 05:32:08] "[33mOPTIONS /api/notifications/unread-count HTTP/1.1[0m" 404 -
+2026-02-12 05:33:08,052 - werkzeug - INFO - 127.0.0.1 - - [12/Feb/2026 05:33:08] "[33mOPTIONS /api/notifications/unread-count HTTP/1.1[0m" 404 -
+2026-02-12 05:34:08,058 - werkzeug - INFO - 127.0.0.1 - - [12/Feb/2026 05:34:08] "[33mOPTIONS /api/notifications/unread-count HTTP/1.1[0m" 404 -
+2026-02-12 05:35:08,056 - werkzeug - INFO - 127.0.0.1 - - [12/Feb/2026 05:35:08] "[33mOPTIONS /api/notifications/unread-count HTTP/1.1[0m" 404 -
+2026-02-12 05:36:08,053 - werkzeug - INFO - 127.0.0.1 - - [12/Feb/2026 05:36:08] "[33mOPTIONS /api/notifications/unread-count HTTP/1.1[0m" 404 -
+2026-02-12 05:37:08,052 - werkzeug - INFO - 127.0.0.1 - - [12/Feb/2026 05:37:08] "[33mOPTIONS /api/notifications/unread-count HTTP/1.1[0m" 404 -
+2026-02-12 05:38:08,053 - werkzeug - INFO - 127.0.0.1 - - [12/Feb/2026 05:38:08] "[33mOPTIONS /api/notifications/unread-count HTTP/1.1[0m" 404 -
+2026-02-12 05:39:08,056 - werkzeug - INFO - 127.0.0.1 - - [12/Feb/2026 05:39:08] "[33mOPTIONS /api/notifications/unread-count HTTP/1.1[0m" 404 -
+2026-02-12 05:40:08,052 - werkzeug - INFO - 127.0.0.1 - - [12/Feb/2026 05:40:08] "[33mOPTIONS /api/notifications/unread-count HTTP/1.1[0m" 404 -
+2026-02-12 05:41:08,054 - werkzeug - INFO - 127.0.0.1 - - [12/Feb/2026 05:41:08] "[33mOPTIONS /api/notifications/unread-count HTTP/1.1[0m" 404 -
+2026-02-12 05:42:08,052 - werkzeug - INFO - 127.0.0.1 - - [12/Feb/2026 05:42:08] "[33mOPTIONS /api/notifications/unread-count HTTP/1.1[0m" 404 -
+2026-02-12 05:43:08,051 - werkzeug - INFO - 127.0.0.1 - - [12/Feb/2026 05:43:08] "[33mOPTIONS /api/notifications/unread-count HTTP/1.1[0m" 404 -
+2026-02-12 05:44:08,052 - werkzeug - INFO - 127.0.0.1 - - [12/Feb/2026 05:44:08] "[33mOPTIONS /api/notifications/unread-count HTTP/1.1[0m" 404 -
+2026-02-12 05:45:08,052 - werkzeug - INFO - 127.0.0.1 - - [12/Feb/2026 05:45:08] "[33mOPTIONS /api/notifications/unread-count HTTP/1.1[0m" 404 -
+2026-02-12 05:46:08,053 - werkzeug - INFO - 127.0.0.1 - - [12/Feb/2026 05:46:08] "[33mOPTIONS /api/notifications/unread-count HTTP/1.1[0m" 404 -
+2026-02-12 05:47:08,054 - werkzeug - INFO - 127.0.0.1 - - [12/Feb/2026 05:47:08] "[33mOPTIONS /api/notifications/unread-count HTTP/1.1[0m" 404 -
+2026-02-12 05:48:08,052 - werkzeug - INFO - 127.0.0.1 - - [12/Feb/2026 05:48:08] "[33mOPTIONS /api/notifications/unread-count HTTP/1.1[0m" 404 -
+2026-02-12 05:49:08,052 - werkzeug - INFO - 127.0.0.1 - - [12/Feb/2026 05:49:08] "[33mOPTIONS /api/notifications/unread-count HTTP/1.1[0m" 404 -
+2026-02-12 05:50:08,052 - werkzeug - INFO - 127.0.0.1 - - [12/Feb/2026 05:50:08] "[33mOPTIONS /api/notifications/unread-count HTTP/1.1[0m" 404 -
+2026-02-12 05:51:08,053 - werkzeug - INFO - 127.0.0.1 - - [12/Feb/2026 05:51:08] "[33mOPTIONS /api/notifications/unread-count HTTP/1.1[0m" 404 -
+2026-02-12 05:52:08,052 - werkzeug - INFO - 127.0.0.1 - - [12/Feb/2026 05:52:08] "[33mOPTIONS /api/notifications/unread-count HTTP/1.1[0m" 404 -
+2026-02-12 05:53:08,053 - werkzeug - INFO - 127.0.0.1 - - [12/Feb/2026 05:53:08] "[33mOPTIONS /api/notifications/unread-count HTTP/1.1[0m" 404 -
+2026-02-12 05:54:08,058 - werkzeug - INFO - 127.0.0.1 - - [12/Feb/2026 05:54:08] "[33mOPTIONS /api/notifications/unread-count HTTP/1.1[0m" 404 -
+2026-02-12 05:55:08,057 - werkzeug - INFO - 127.0.0.1 - - [12/Feb/2026 05:55:08] "[33mOPTIONS /api/notifications/unread-count HTTP/1.1[0m" 404 -
+2026-02-12 05:56:08,056 - werkzeug - INFO - 127.0.0.1 - - [12/Feb/2026 05:56:08] "[33mOPTIONS /api/notifications/unread-count HTTP/1.1[0m" 404 -
+2026-02-12 05:57:08,057 - werkzeug - INFO - 127.0.0.1 - - [12/Feb/2026 05:57:08] "[33mOPTIONS /api/notifications/unread-count HTTP/1.1[0m" 404 -
+2026-02-12 05:58:08,059 - werkzeug - INFO - 127.0.0.1 - - [12/Feb/2026 05:58:08] "[33mOPTIONS /api/notifications/unread-count HTTP/1.1[0m" 404 -
+2026-02-12 05:59:08,058 - werkzeug - INFO - 127.0.0.1 - - [12/Feb/2026 05:59:08] "[33mOPTIONS /api/notifications/unread-count HTTP/1.1[0m" 404 -
+2026-02-12 06:00:08,057 - werkzeug - INFO - 127.0.0.1 - - [12/Feb/2026 06:00:08] "[33mOPTIONS /api/notifications/unread-count HTTP/1.1[0m" 404 -
+2026-02-12 06:01:08,059 - werkzeug - INFO - 127.0.0.1 - - [12/Feb/2026 06:01:08] "[33mOPTIONS /api/notifications/unread-count HTTP/1.1[0m" 404 -
+2026-02-12 06:02:08,069 - werkzeug - INFO - 127.0.0.1 - - [12/Feb/2026 06:02:08] "[33mOPTIONS /api/notifications/unread-count HTTP/1.1[0m" 404 -
+2026-02-12 06:03:08,059 - werkzeug - INFO - 127.0.0.1 - - [12/Feb/2026 06:03:08] "[33mOPTIONS /api/notifications/unread-count HTTP/1.1[0m" 404 -
+2026-02-12 06:04:08,056 - werkzeug - INFO - 127.0.0.1 - - [12/Feb/2026 06:04:08] "[33mOPTIONS /api/notifications/unread-count HTTP/1.1[0m" 404 -
+2026-02-12 06:05:08,056 - werkzeug - INFO - 127.0.0.1 - - [12/Feb/2026 06:05:08] "[33mOPTIONS /api/notifications/unread-count HTTP/1.1[0m" 404 -
+2026-02-12 06:06:08,059 - werkzeug - INFO - 127.0.0.1 - - [12/Feb/2026 06:06:08] "[33mOPTIONS /api/notifications/unread-count HTTP/1.1[0m" 404 -
+2026-02-12 06:07:08,052 - werkzeug - INFO - 127.0.0.1 - - [12/Feb/2026 06:07:08] "[33mOPTIONS /api/notifications/unread-count HTTP/1.1[0m" 404 -
+2026-02-12 06:08:08,067 - werkzeug - INFO - 127.0.0.1 - - [12/Feb/2026 06:08:08] "[33mOPTIONS /api/notifications/unread-count HTTP/1.1[0m" 404 -
+2026-02-12 06:08:17,552 - werkzeug - INFO - 127.0.0.1 - - [12/Feb/2026 06:08:17] "[33mOPTIONS /api/admin/stats HTTP/1.1[0m" 404 -
+2026-02-12 06:08:17,568 - werkzeug - INFO - 127.0.0.1 - - [12/Feb/2026 06:08:17] "OPTIONS /api/wishlist/ HTTP/1.1" 200 -
+2026-02-12 06:08:17,571 - werkzeug - INFO - 127.0.0.1 - - [12/Feb/2026 06:08:17] "OPTIONS /api/orders/ HTTP/1.1" 200 -
+2026-02-12 06:08:17,574 - werkzeug - INFO - 127.0.0.1 - - [12/Feb/2026 06:08:17] "[33mOPTIONS /api/notifications HTTP/1.1[0m" 404 -
+2026-02-12 06:08:17,578 - werkzeug - INFO - 127.0.0.1 - - [12/Feb/2026 06:08:17] "OPTIONS /api/auth/me HTTP/1.1" 200 -
+2026-02-12 06:08:17,581 - werkzeug - INFO - 127.0.0.1 - - [12/Feb/2026 06:08:17] "[33mOPTIONS /api/admin/stats HTTP/1.1[0m" 404 -
+2026-02-12 06:08:17,584 - werkzeug - INFO - 127.0.0.1 - - [12/Feb/2026 06:08:17] "OPTIONS /api/wishlist/ HTTP/1.1" 200 -
+2026-02-12 06:08:17,587 - werkzeug - INFO - 127.0.0.1 - - [12/Feb/2026 06:08:17] "OPTIONS /api/orders/ HTTP/1.1" 200 -
+2026-02-12 06:08:17,614 - werkzeug - INFO - 127.0.0.1 - - [12/Feb/2026 06:08:17] "[31m[1mGET /api/wishlist/ HTTP/1.1[0m" 401 -
+2026-02-12 06:08:17,615 - werkzeug - INFO - 127.0.0.1 - - [12/Feb/2026 06:08:17] "[33mOPTIONS /api/notifications HTTP/1.1[0m" 404 -
+2026-02-12 06:08:17,620 - werkzeug - INFO - 127.0.0.1 - - [12/Feb/2026 06:08:17] "OPTIONS /api/auth/me HTTP/1.1" 200 -
+2026-02-12 06:08:17,624 - werkzeug - INFO - 127.0.0.1 - - [12/Feb/2026 06:08:17] "[31m[1mGET /api/orders/ HTTP/1.1[0m" 401 -
+2026-02-12 06:08:17,627 - werkzeug - INFO - 127.0.0.1 - - [12/Feb/2026 06:08:17] "[31m[1mGET /api/auth/me HTTP/1.1[0m" 401 -
+2026-02-12 06:08:17,632 - werkzeug - INFO - 127.0.0.1 - - [12/Feb/2026 06:08:17] "[31m[1mGET /api/wishlist/ HTTP/1.1[0m" 401 -
+2026-02-12 06:08:17,644 - werkzeug - INFO - 127.0.0.1 - - [12/Feb/2026 06:08:17] "[31m[1mGET /api/orders/ HTTP/1.1[0m" 401 -
+2026-02-12 06:08:17,647 - werkzeug - INFO - 127.0.0.1 - - [12/Feb/2026 06:08:17] "[31m[1mGET /api/auth/me HTTP/1.1[0m" 401 -
