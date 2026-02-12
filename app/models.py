@@ -237,9 +237,28 @@ class BargainSession(db.Model, TimestampMixin):
             "id": str(self.id),
             "animal_id": str(self.animal_id),
             "buyer_id": str(self.buyer_id),
+            "farmer_id": str(self.farmer_id),
             "status": self.status,
+            "initial_offer": float(self.initial_offer) if self.initial_offer else None,
+            "final_price": float(self.final_price) if self.final_price else None,
             "order_id": str(linked_order.id) if linked_order else None,
             "created_at": self.created_at.isoformat() if self.created_at else None,
+            "animal": {
+                "id": str(self.animal.id),
+                "species": self.animal.species,
+                "breed": self.animal.breed,
+                "image_url": self.animal.image_url,
+                "farmer_name": self.farmer.farm_name if self.farmer else None,
+            } if self.animal else None,
+            "farmer": {
+                "id": str(self.farmer.id),
+                "farm_name": self.farmer.farm_name,
+                "full_name": self.farmer.user.full_name if self.farmer and hasattr(self.farmer, 'user') else None,
+            } if self.farmer else None,
+            "buyer": {
+                "id": str(self.buyer.id),
+                "full_name": self.buyer.user.full_name if self.buyer and hasattr(self.buyer, 'user') else None,
+            } if self.buyer else None,
         }
 
 
