@@ -9,6 +9,8 @@ from config import config
 migrate = Migrate()
 jwt = JWTManager()
 
+# create app instance using factory
+
 
 def create_app(config_name="default"):
     app = Flask(__name__)
