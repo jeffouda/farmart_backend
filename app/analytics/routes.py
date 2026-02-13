@@ -28,7 +28,7 @@ def get_farmer_analytics():
         return jsonify({"error": "Invalid user ID format"}), 400
 
     user = User.query.get(current_user_id)
-    if not user or user.role.value != "farmer":
+    if user.role != "farmer":
         return jsonify({"error": "Only farmers can view analytics"}), 403
 
     farmer = Farmer.query.filter_by(user_id=current_user_id).first()
