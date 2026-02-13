@@ -3,6 +3,7 @@ from datetime import datetime
 from enum import Enum
 from flask_sqlalchemy import SQLAlchemy
 from werkzeug.security import generate_password_hash, check_password_hash
+from sqlalchemy.dialects.postgresql import UUID
 
 db = SQLAlchemy()
 
@@ -49,11 +50,16 @@ class TimestampMixin:
     updated_at = db.Column(
         db.DateTime, default=datetime.utcnow, onupdate=datetime.utcnow
     )
-
 class User(db.Model, TimestampMixin):
     __tablename__ = "users"
 
-    id = db.Column(UUIDType(), primary_key=True, default=lambda: str(uuid.uuid4()))
+    # Use native PostgreSQL UUID type and remove lambda str conversion
+    id = db.Column(
+        UUID(as_uuid=True), 
+        primary_key=True, 
+        default=uuid.uuid4
+    )
+    
     email = db.Column(db.String(120), unique=True, nullable=False, index=True)
     password_hash = db.Column(db.String(256), nullable=False)
     role = db.Column(db.Enum(UserRole), nullable=False, default=UserRole.BUYER)
