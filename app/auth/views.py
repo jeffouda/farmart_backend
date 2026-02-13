@@ -5,7 +5,6 @@ from app.models import (
     User,
     Farmer,
     Buyer,
-    UserRole,
 )
 from . import auth_bp
 from datetime import datetime
@@ -57,7 +56,7 @@ def register():
     # Create the Base User with profile data
     new_user = User(
         email=email,
-        role=UserRole(role),
+        role=role,  # Use string directly
         full_name=full_name,
         phone_number=phone_number,
         location=location,
@@ -199,23 +198,17 @@ def get_current_user():
     # Get user ID from JWT token (returns string UUID)
     user_id_str = get_jwt_identity()
 
-    # Convert string UUID to UUID object for database query
-    try:
-        user_id_uuid = uuid.UUID(user_id_str)
-    except ValueError:
-        return jsonify({"error": "Invalid user ID format"}), 400
-
-    # Find user in database
-    user = User.query.get(user_id_uuid)
+    # Find user in database (use string directly)
+    user = User.query.get(user_id_str)
 
     if not user:
         return jsonify({"error": "User not found"}), 404
 
-    # Build response with user data
+    # Build response with user data - role is now a string
     user_data = {
         "id": str(user.id),
         "email": user.email,
-        "role": user.role.value if hasattr(user.role, 'value') else str(user.role),
+        "role": str(user.role),  # role is now a string
         "full_name": user.full_name,
         "phone_number": user.phone_number,
         "location": user.location,
@@ -225,13 +218,13 @@ def get_current_user():
     }
 
     # Add role-specific profile data
-    if user.role.value == "farmer" and user.farmer:
+    if user.role == "farmer" and user.farmer:
         user_data["farm_name"] = user.farmer.farm_name
         user_data["farm_location"] = user.farmer.location
         user_data["farm_phone_number"] = user.farmer.phone_number
         user_data["is_verified"] = user.farmer.is_verified
         user_data["wallet_balance"] = float(user.farmer.wallet_balance) if user.farmer.wallet_balance else 0
-    elif user.role.value == "buyer" and user.buyer:
+    elif user.role == "buyer" and user.buyer:
         user_data["delivery_address"] = user.buyer.delivery_address
         user_data["preferred_contact"] = user.buyer.preferred_contact
 
@@ -245,12 +238,8 @@ def update_profile():
     """Update current user's profile"""
     user_id_str = get_jwt_identity()
 
-    try:
-        user_id_uuid = uuid.UUID(user_id_str)
-    except ValueError:
-        return jsonify({"error": "Invalid user ID format"}), 400
-
-    user = User.query.get(user_id_uuid)
+    # Use string directly since database stores UUIDs as strings
+    user = User.query.get(user_id_str)
 
     if not user:
         return jsonify({"error": "User not found"}), 404
@@ -266,13 +255,13 @@ def update_profile():
         user.location = data["location"]
 
     # Update role-specific fields
-    if user.role.value == "farmer" and user.farmer:
+    if user.role == "farmer" and user.farmer:
         if "farm_name" in data:
             user.farmer.farm_name = data["farm_name"]
         if "farm_location" in data:
             user.farmer.location = data["farm_location"]
         # Note: phone_number should be updated on user level, not farmer level for uniqueness reasons
-    elif user.role.value == "buyer" and user.buyer:
+    elif user.role == "buyer" and user.buyer:
         if "delivery_address" in data:
             user.buyer.delivery_address = data["delivery_address"]
         if "preferred_contact" in data:

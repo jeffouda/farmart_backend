@@ -3,6 +3,7 @@ from datetime import datetime
 from enum import Enum
 from flask_sqlalchemy import SQLAlchemy
 from werkzeug.security import generate_password_hash, check_password_hash
+from sqlalchemy.dialects.postgresql import UUID
 
 db = SQLAlchemy()
 
@@ -49,14 +50,14 @@ class TimestampMixin:
     updated_at = db.Column(
         db.DateTime, default=datetime.utcnow, onupdate=datetime.utcnow
     )
-
 class User(db.Model, TimestampMixin):
     __tablename__ = "users"
 
-    id = db.Column(UUIDType(), primary_key=True, default=lambda: str(uuid.uuid4()))
+    # Store UUID as string to match database schema
+    id = db.Column(db.String(36), primary_key=True, default=lambda: str(uuid.uuid4()))
     email = db.Column(db.String(120), unique=True, nullable=False, index=True)
     password_hash = db.Column(db.String(256), nullable=False)
-    role = db.Column(db.Enum(UserRole), nullable=False, default=UserRole.BUYER)
+    role = db.Column(db.String(20), nullable=False, default="buyer")
     is_active = db.Column(db.Boolean, default=True)
 
     # Profile fields
@@ -89,8 +90,9 @@ class User(db.Model, TimestampMixin):
 class Farmer(db.Model, TimestampMixin):
     __tablename__ = "farmers"
 
-    id = db.Column(UUIDType(), primary_key=True, default=lambda: str(uuid.uuid4()))
-    user_id = db.Column(UUIDType(), db.ForeignKey("users.id"), nullable=False)
+    # Store UUID as string to match database schema
+    id = db.Column(db.String(36), primary_key=True, default=lambda: str(uuid.uuid4()))
+    user_id = db.Column(db.String(36), db.ForeignKey("users.id"), nullable=False)
 
     farm_name = db.Column(db.String(100), nullable=False)
     location = db.Column(db.String(255), nullable=False)
@@ -107,8 +109,9 @@ class Farmer(db.Model, TimestampMixin):
 class Buyer(db.Model, TimestampMixin):
     __tablename__ = "buyers"
 
-    id = db.Column(UUIDType(), primary_key=True, default=lambda: str(uuid.uuid4()))
-    user_id = db.Column(UUIDType(), db.ForeignKey("users.id"), nullable=False)
+    # Store UUID as string to match database schema
+    id = db.Column(db.String(36), primary_key=True, default=lambda: str(uuid.uuid4()))
+    user_id = db.Column(db.String(36), db.ForeignKey("users.id"), nullable=False)
 
     delivery_address = db.Column(db.Text, nullable=True)
     preferred_contact = db.Column(db.String(50))
@@ -120,8 +123,9 @@ class Buyer(db.Model, TimestampMixin):
 class Animal(db.Model, TimestampMixin):
     __tablename__ = "animals"
 
-    id = db.Column(UUIDType(), primary_key=True, default=lambda: str(uuid.uuid4()))
-    farmer_id = db.Column(UUIDType(), db.ForeignKey("farmers.id"), nullable=False)
+    # Store UUID as string to match database schema
+    id = db.Column(db.String(36), primary_key=True, default=lambda: str(uuid.uuid4()))
+    farmer_id = db.Column(db.String(36), db.ForeignKey("farmers.id"), nullable=False)
 
     species = db.Column(db.String(50), nullable=False)
     breed = db.Column(db.String(100))
@@ -154,9 +158,10 @@ class Animal(db.Model, TimestampMixin):
 class Order(db.Model, TimestampMixin):
     __tablename__ = "orders"
 
-    id = db.Column(UUIDType(), primary_key=True, default=lambda: str(uuid.uuid4()))
-    buyer_id = db.Column(UUIDType(), db.ForeignKey("buyers.id"), nullable=False)
-    farmer_id = db.Column(UUIDType(), db.ForeignKey("farmers.id"), nullable=False)
+    # Store UUID as string to match database schema
+    id = db.Column(db.String(36), primary_key=True, default=lambda: str(uuid.uuid4()))
+    buyer_id = db.Column(db.String(36), db.ForeignKey("buyers.id"), nullable=False)
+    farmer_id = db.Column(db.String(36), db.ForeignKey("farmers.id"), nullable=False)
     bargain_id = db.Column(db.Integer, db.ForeignKey("bargain_sessions.id"), nullable=True)
 
     items = db.Column(db.JSON, nullable=False)
@@ -187,8 +192,9 @@ class Order(db.Model, TimestampMixin):
 class EscrowRecord(db.Model, TimestampMixin):
     __tablename__ = "escrow_records"
 
-    id = db.Column(UUIDType(), primary_key=True, default=lambda: str(uuid.uuid4()))
-    order_id = db.Column(UUIDType(), db.ForeignKey("orders.id"), nullable=False)
+    # Store UUID as string to match database schema
+    id = db.Column(db.String(36), primary_key=True, default=lambda: str(uuid.uuid4()))
+    order_id = db.Column(db.String(36), db.ForeignKey("orders.id"), nullable=False)
     
     # Using Numeric(10, 2) is best practice for currency to avoid floating-point errors
     amount = db.Column(db.Numeric(10, 2), nullable=False)
@@ -208,10 +214,11 @@ class EscrowRecord(db.Model, TimestampMixin):
 class Review(db.Model, TimestampMixin):
     __tablename__ = "reviews"
 
-    id = db.Column(UUIDType(), primary_key=True, default=lambda: str(uuid.uuid4()))
-    order_id = db.Column(UUIDType(), db.ForeignKey("orders.id"), nullable=False)
-    reviewer_id = db.Column(UUIDType(), db.ForeignKey("users.id"), nullable=False)
-    target_id = db.Column(UUIDType(), db.ForeignKey("users.id"), nullable=False)
+    # Store UUID as string to match database schema
+    id = db.Column(db.String(36), primary_key=True, default=lambda: str(uuid.uuid4()))
+    order_id = db.Column(db.String(36), db.ForeignKey("orders.id"), nullable=False)
+    reviewer_id = db.Column(db.String(36), db.ForeignKey("users.id"), nullable=False)
+    target_id = db.Column(db.String(36), db.ForeignKey("users.id"), nullable=False)
 
     rating = db.Column(db.Integer, nullable=False)
     comment = db.Column(db.Text, nullable=True)
@@ -226,8 +233,8 @@ class Wishlist(db.Model, TimestampMixin):
     __tablename__ = "wishlists"
 
     id = db.Column(db.Integer, primary_key=True, autoincrement=True)
-    user_id = db.Column(UUIDType(), db.ForeignKey("users.id"), nullable=False)
-    animal_id = db.Column(UUIDType(), db.ForeignKey("animals.id"), nullable=False)
+    user_id = db.Column(db.String(36), db.ForeignKey("users.id"), nullable=False)
+    animal_id = db.Column(db.String(36), db.ForeignKey("animals.id"), nullable=False)
 
     animal = db.relationship("Animal", backref="wishlisted_by", lazy=True)
 
@@ -245,9 +252,9 @@ class BargainSession(db.Model, TimestampMixin):
     __tablename__ = "bargain_sessions"
 
     id = db.Column(db.Integer, primary_key=True, autoincrement=True)
-    animal_id = db.Column(UUIDType(), db.ForeignKey("animals.id"), nullable=False)
-    buyer_id = db.Column(UUIDType(), db.ForeignKey("buyers.id"), nullable=False)
-    farmer_id = db.Column(UUIDType(), db.ForeignKey("farmers.id"), nullable=False)
+    animal_id = db.Column(db.String(36), db.ForeignKey("animals.id"), nullable=False)
+    buyer_id = db.Column(db.String(36), db.ForeignKey("buyers.id"), nullable=False)
+    farmer_id = db.Column(db.String(36), db.ForeignKey("farmers.id"), nullable=False)
 
     initial_offer = db.Column(db.Numeric(10, 2), nullable=False)
     final_price = db.Column(db.Numeric(10, 2), nullable=True)
@@ -297,7 +304,7 @@ class BargainMessage(db.Model):
 
     id = db.Column(db.Integer, primary_key=True, autoincrement=True)
     session_id = db.Column(db.Integer, db.ForeignKey("bargain_sessions.id"), nullable=False)
-    sender_id = db.Column(UUIDType(), db.ForeignKey("users.id"), nullable=False)
+    sender_id = db.Column(db.String(36), db.ForeignKey("users.id"), nullable=False)
     sender_role = db.Column(db.String(20), nullable=False)
     message = db.Column(db.Text, nullable=False)
     offered_price = db.Column(db.Numeric(10, 2), nullable=True)
@@ -315,15 +322,16 @@ class BargainMessage(db.Model):
 class Dispute(db.Model, TimestampMixin):
     __tablename__ = "disputes"
     
-    id = db.Column(UUIDType(), primary_key=True, default=lambda: str(uuid.uuid4()))
+    # Store UUID as string to match database schema
+    id = db.Column(db.String(36), primary_key=True, default=lambda: str(uuid.uuid4()))
     ticket_id = db.Column(db.String(20), unique=True, nullable=False)
     
     # Link to order (if dispute is about an order)
-    order_id = db.Column(UUIDType(), db.ForeignKey("orders.id"), nullable=True)
+    order_id = db.Column(db.String(36), db.ForeignKey("orders.id"), nullable=True)
     
     # Dispute parties
-    filer_id = db.Column(UUIDType(), db.ForeignKey("users.id"), nullable=False)
-    target_id = db.Column(UUIDType(), db.ForeignKey("users.id"), nullable=True)
+    filer_id = db.Column(db.String(36), db.ForeignKey("users.id"), nullable=False)
+    target_id = db.Column(db.String(36), db.ForeignKey("users.id"), nullable=True)
     
     # Dispute details
     dispute_type = db.Column(db.String(20), default="order")  # 'order', 'user', 'livestock'
@@ -384,9 +392,9 @@ class Message(db.Model):
     __tablename__ = "messages"
 
     id = db.Column(db.Integer, primary_key=True, autoincrement=True)
-    sender_id = db.Column(UUIDType(), db.ForeignKey("users.id"), nullable=False)
-    receiver_id = db.Column(UUIDType(), db.ForeignKey("users.id"), nullable=False)
-    livestock_id = db.Column(UUIDType(), db.ForeignKey("animals.id"), nullable=False)
+    sender_id = db.Column(db.String(36), db.ForeignKey("users.id"), nullable=False)
+    receiver_id = db.Column(db.String(36), db.ForeignKey("users.id"), nullable=False)
+    livestock_id = db.Column(db.String(36), db.ForeignKey("animals.id"), nullable=False)
     content = db.Column(db.Text, nullable=False)
     is_read = db.Column(db.Boolean, default=False)
     created_at = db.Column(db.DateTime, default=datetime.utcnow)
@@ -414,7 +422,7 @@ class Notification(db.Model):
     __tablename__ = "notifications"
 
     id = db.Column(db.Integer, primary_key=True, autoincrement=True)
-    user_id = db.Column(UUIDType(), db.ForeignKey("users.id"), nullable=False)
+    user_id = db.Column(db.String(36), db.ForeignKey("users.id"), nullable=False)
     
     # Notification types
     type = db.Column(db.String(30), nullable=False)  # 'new_order', 'new_negotiation', 'new_dispute', 'order_update', 'negotiation_update'
@@ -422,7 +430,7 @@ class Notification(db.Model):
     message = db.Column(db.Text, nullable=False)
     
     # Related entity references
-    related_id = db.Column(UUIDType(), nullable=True)  # order_id, bargain_id, dispute_id
+    related_id = db.Column(db.String(36), nullable=True)  # order_id, bargain_id, dispute_id
     related_type = db.Column(db.String(30), nullable=True)  # 'order', 'negotiation', 'dispute'
     
     # Status
@@ -469,10 +477,14 @@ class PendingCheckout(db.Model, TimestampMixin):
     """
     __tablename__ = "pending_checkouts"
 
-    id = db.Column(UUIDType(), primary_key=True, default=lambda: str(uuid.uuid4()))  # Same as temp_order_id
-    buyer_id = db.Column(UUIDType(), db.ForeignKey("buyers.id"), nullable=False)
-    farmer_id = db.Column(UUIDType(), db.ForeignKey("farmers.id"), nullable=False)
+    # Store UUID as string to match database schema
+    id = db.Column(db.String(36), primary_key=True, default=lambda: str(uuid.uuid4()))  # Same as temp_order_id
+    buyer_id = db.Column(db.String(36), db.ForeignKey("buyers.id"), nullable=False)
+    farmer_id = db.Column(db.String(36), db.ForeignKey("farmers.id"), nullable=False)
     bargain_id = db.Column(db.Integer, db.ForeignKey("bargain_sessions.id"), nullable=True)
+    
+    # Link to the order created by /api/orders/
+    order_id = db.Column(db.String(36), nullable=True)
     
     items = db.Column(db.JSON, nullable=False)
     total_amount = db.Column(db.Numeric(10, 2), nullable=False)
