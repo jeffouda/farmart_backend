@@ -14,7 +14,7 @@ from . import orders_bp
 import uuid
 from datetime import datetime
 
-
+# --- HELPER ---
 def get_uuid(val):
     """Helper to convert string to UUID."""
     if isinstance(val, uuid.UUID):
@@ -24,12 +24,12 @@ def get_uuid(val):
     except (ValueError, AttributeError):
         return None
 
+# --- ROUTES (Order Matters!) ---
 
 @orders_bp.route("/", methods=["POST"])
 @jwt_required()
 def create_order():
     """Create order from cart items"""
-    # Use string user_id since database stores UUIDs as strings
     user_id = get_jwt_identity()
     user = User.query.get(user_id)
 
@@ -42,20 +42,17 @@ def create_order():
 
     data = request.get_json()
     items = data.get("items", [])
-    checkout_id = data.get("checkout_id")  # Optional: link to pending checkout
+    checkout_id = data.get("checkout_id") 
 
     if not items:
         return jsonify({"error": "No items in order"}), 400
 
-    # Group items by farmer
     farmer_orders = {}
     for item in items:
-        # Support both 'id' and 'animal_id' from frontend
         animal_id = item.get("animal_id") or item.get("id")
         if not animal_id:
             return jsonify({"error": "Missing animal ID in item"}), 400
 
-        # Use string directly since database stores UUIDs as strings
         animal = Animal.query.get(animal_id)
         if not animal or animal.status != "available":
             return jsonify({"error": f"Animal {animal_id} not available"}), 400
@@ -71,30 +68,27 @@ def create_order():
             "quantity": item.get("quantity", 1),
         })
 
-    # Create separate order per farmer
     created_orders = []
     for farmer_id, order_items in farmer_orders.items():
         total = sum(item["price"] * item["quantity"] for item in order_items)
 
         order = Order(
             buyer_id=buyer.id,
-            farmer_id=farmer_id,  # Use string directly
+            farmer_id=farmer_id, 
             items=order_items,
             total_amount=total,
             status="pending",
             payment_status="pending",
-            checkout_id=checkout_id,  # Link to M-Pesa checkout
+            checkout_id=checkout_id,
         )
         db.session.add(order)
         db.session.flush()
 
-        # Mark animals as pending
         for item in order_items:
-            animal = Animal.query.get(item["animal_id"])  # Use string directly
+            animal = Animal.query.get(item["animal_id"])
             animal.status = "pending"
 
-        # Create escrow record
-        farmer = Farmer.query.get(farmer_id)  # Use string directly
+        farmer = Farmer.query.get(farmer_id)
         escrow = EscrowRecord(
             order_id=order.id,
             amount=total,
@@ -103,7 +97,6 @@ def create_order():
         )
         db.session.add(escrow)
 
-        # Notify farmer
         create_notification(
             user_id=farmer.user_id,
             type="new_order",
@@ -117,7 +110,6 @@ def create_order():
 
     db.session.commit()
 
-    # Return first order ID for frontend compatibility
     return jsonify({
         "orders": created_orders,
         "order_id": str(created_orders[0]["id"]) if created_orders else None,
@@ -129,37 +121,26 @@ def create_order():
 @jwt_required()
 def get_orders():
     """Get user orders"""
-    # Use string user_id since database stores UUIDs as strings
     user_id = get_jwt_identity()
     user = User.query.get(user_id)
 
     if user.role == "buyer":
         buyer = Buyer.query.filter_by(user_id=user_id).first()
-        orders = (
-            Order.query
-            .filter_by(buyer_id=buyer.id)
-            .order_by(Order.created_at.desc())
-            .all()
-        )
+        orders = Order.query.filter_by(buyer_id=buyer.id).order_by(Order.created_at.desc()).all()
     elif user.role == "farmer":
         farmer = Farmer.query.filter_by(user_id=user_id).first()
-        orders = (
-            Order.query
-            .filter_by(farmer_id=farmer.id)
-            .order_by(Order.created_at.desc())
-            .all()
-        )
+        orders = Order.query.filter_by(farmer_id=farmer.id).order_by(Order.created_at.desc()).all()
     else:
         orders = Order.query.order_by(Order.created_at.desc()).all()
 
     return jsonify({"orders": [o.to_dict() for o in orders]}), 200
 
 
+# ✅ CRITICAL: This MUST come before the /<uuid:order_id> route
 @orders_bp.route("/stats", methods=["GET"])
 @jwt_required()
 def get_order_stats():
     """Get order statistics for a user"""
-    # Use string user_id since database stores UUIDs as strings
     user_id = get_jwt_identity()
     user = User.query.get(user_id)
 
@@ -173,9 +154,7 @@ def get_order_stats():
         orders = Order.query.all()
 
     total_orders = len(orders)
-    total_spent = sum(
-        o.total_amount for o in orders if o.status in ["paid", "completed", "delivered"]
-    )
+    total_spent = sum(o.total_amount for o in orders if o.status in ["paid", "completed", "delivered"])
 
     return jsonify({
         "total_orders": total_orders,
@@ -183,24 +162,39 @@ def get_order_stats():
     }), 200
 
 
-@orders_bp.route("/<order_id>", methods=["GET"])
+# ✅ FIX: Explicitly tell Flask to expect a UUID. 
+# This prevents it from catching "my-sales" or "stats" strings.
+@orders_bp.route("/<uuid:order_id>", methods=["GET"])
 @jwt_required()
 def get_order(order_id):
     """Get order details"""
-    # Use string directly since database stores UUIDs as strings
-    order = Order.query.get(order_id)
+    order = Order.query.get(str(order_id))
     if not order:
         return jsonify({"error": "Order not found"}), 404
 
     return jsonify(order.to_dict()), 200
 
 
-@orders_bp.route("/<order_id>/accept", methods=["PUT"])
+@orders_bp.route("/poll-status/<uuid:order_id>", methods=["GET"])
+@jwt_required()
+def poll_order_status(order_id):
+    """Poll for order status updates"""
+    order = Order.query.get(str(order_id))
+    if not order:
+        return jsonify({"error": "Order not found"}), 404
+    
+    return jsonify({
+        "order_id": str(order.id),
+        "status": order.status,
+        "payment_status": order.payment_status,
+    }), 200
+
+
+@orders_bp.route("/<uuid:order_id>/accept", methods=["PUT"])
 @jwt_required()
 def accept_order(order_id):
     """Farmer accepts order"""
-    # Use string directly since database stores UUIDs as strings
-    order = Order.query.get(order_id)
+    order = Order.query.get(str(order_id))
     if not order:
         return jsonify({"error": "Order not found"}), 404
 
@@ -216,7 +210,6 @@ def accept_order(order_id):
 
     order.status = "accepted"
 
-    # Notify buyer
     create_notification(
         user_id=order.buyer.user_id,
         type="order_update",
@@ -230,25 +223,22 @@ def accept_order(order_id):
     return jsonify({"message": "Order accepted", "order": order.to_dict()}), 200
 
 
-@orders_bp.route("/<order_id>/confirm-payment", methods=["POST"])
+@orders_bp.route("/<uuid:order_id>/confirm-payment", methods=["POST"])
 @jwt_required()
 def confirm_payment(order_id):
-    """Simulate payment confirmation (for demo without M-Pesa)"""
-    # Use string directly since database stores UUIDs as strings
-    order = Order.query.get(order_id)
+    """Simulate payment confirmation"""
+    order = Order.query.get(str(order_id))
     if not order:
         return jsonify({"error": "Order not found"}), 404
 
     order.payment_status = "paid"
     order.status = "processing"
 
-    # Update escrow
     if order.escrow:
         order.escrow.status = "held"
 
-    # Mark animals as sold
     for item in order.items:
-        animal = Animal.query.get(item["animal_id"])  # Use string directly
+        animal = Animal.query.get(item["animal_id"])
         if animal:
             animal.status = "sold"
 
@@ -256,31 +246,27 @@ def confirm_payment(order_id):
     return jsonify({"message": "Payment confirmed", "order": order.to_dict()}), 200
 
 
-@orders_bp.route("/<order_id>/confirm-delivery", methods=["POST"])
+@orders_bp.route("/<uuid:order_id>/confirm-delivery", methods=["POST"])
 @jwt_required()
 def confirm_delivery(order_id):
     """Buyer confirms delivery - releases funds to farmer"""
-    # Use string directly since database stores UUIDs as strings
-    order = Order.query.get(order_id)
+    order = Order.query.get(str(order_id))
     if not order:
         return jsonify({"error": "Order not found"}), 404
 
     user_id = get_jwt_identity()
-    user = User.query.get(user_id)
-
     buyer = Buyer.query.filter_by(user_id=user_id).first()
+    
     if order.buyer_id != buyer.id:
         return jsonify({"error": "Not your order"}), 403
 
     order.status = "completed"
 
-    # Release escrow funds to farmer
     if order.escrow:
         order.escrow.status = "released"
         farmer = Farmer.query.get(order.farmer_id)
         farmer.wallet_balance += order.total_amount
 
-    # Notify farmer
     create_notification(
         user_id=order.farmer.user_id,
         type="order_update",
@@ -292,19 +278,3 @@ def confirm_delivery(order_id):
 
     db.session.commit()
     return jsonify({"message": "Delivery confirmed, funds released"}), 200
-
-
-@orders_bp.route("/poll-status/<order_id>", methods=["GET"])
-@jwt_required()
-def poll_order_status(order_id):
-    """Poll for order status updates"""
-    # Use string directly since database stores UUIDs as strings
-    order = Order.query.get(order_id)
-    if not order:
-        return jsonify({"error": "Order not found"}), 404
-    
-    return jsonify({
-        "order_id": str(order.id),
-        "status": order.status,
-        "payment_status": order.payment_status,
-    }), 200
