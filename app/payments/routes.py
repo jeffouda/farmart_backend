@@ -10,7 +10,8 @@ from datetime import datetime, timedelta
 # 1. USER ROUTES (Initiation & Status)
 # ==========================================
 
-@payment_bp.route('/stk-push', methods=['POST'])
+
+@payment_bp.route('/stk-push', methods=['POST', 'OPTIONS'])
 @jwt_required()
 def trigger_payment():
     """
