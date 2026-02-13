@@ -33,7 +33,7 @@ def create_session():
         return jsonify({"error": "User not found"}), 404
 
     # Validate buyer role - allow both string and enum comparison
-    user_role = str(user.role.value).lower()
+    user_role = str(user.role).lower()
     if user_role != "buyer":
         return jsonify({"error": "Only buyers can start bargain sessions", "debug_role": user_role}), 403
 
@@ -139,7 +139,7 @@ def get_sessions():
 
     try:
         # Get sessions based on role
-        if user.role.value == "buyer":
+        if user.role == "buyer":
             buyer = Buyer.query.filter_by(user_id=user_id_uuid).first()
             if buyer:
                 sessions = (
@@ -150,7 +150,7 @@ def get_sessions():
                 )
             else:
                 sessions = []
-        elif user.role.value == "farmer":
+        elif user.role == "farmer":
             farmer = Farmer.query.filter_by(user_id=user_id_uuid).first()
             if farmer:
                 sessions = (
@@ -217,7 +217,7 @@ def get_session(session_id):
     has_access = (
         (buyer and session.buyer_id == buyer.id)
         or (farmer and session.farmer_id == farmer.id)
-        or user.role.value == "admin"
+        or user.role == "admin"
     )
 
     if not has_access:
@@ -539,7 +539,7 @@ def respond_session(session_id):
         return jsonify({"error": "User not found"}), 404
 
     # Only farmers can respond
-    if user.role.value != "farmer":
+    if user.role != "farmer":
         return jsonify({"error": "Only farmers can respond to bargain sessions"}), 403
 
     session = BargainSession.query.get(session_id)

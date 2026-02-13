@@ -10,7 +10,7 @@ def admin_required():
     """Check if user is admin"""
     user_id = uuid.UUID(get_jwt_identity())
     user = User.query.get(user_id)
-    if not user or user.role.value != "admin":
+    if not user or user.role != "admin":
         return None
     return user
 
@@ -64,7 +64,7 @@ def get_users():
         "users": [{
             "id": str(u.id),
             "email": u.email,
-            "role": u.role.value,
+            "role": u.role,
             "full_name": u.full_name,
             "is_active": u.is_active,
             "created_at": u.created_at.isoformat() if u.created_at else None

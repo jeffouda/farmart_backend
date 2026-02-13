@@ -29,7 +29,7 @@ def admin_required(f):
             return jsonify({"error": "Invalid user ID format"}), 400
         
         user = User.query.get(user_uuid)
-        if not user or user.role.value != "admin":
+        if not user or user.role != "admin":
             return jsonify({"error": "Admin access required"}), 403
         
         return f(*args, **kwargs)
@@ -73,13 +73,13 @@ def create_dispute():
         if order_id and not target_id:
             order = Order.query.get(order_id)
             if order:
-                if user.role.value == "farmer":
+                if user.role == "farmer":
                     # Farmer filing dispute → target is buyer
                     buyer = Buyer.query.get(order.buyer_id)
                     if buyer:
                         target_id = buyer.user_id
                         current_app.logger.info(f"Auto-detected buyer target_id: {target_id} for farmer dispute on order {order_id}")
-                elif user.role.value == "buyer":
+                elif user.role == "buyer":
                     # Buyer filing dispute → target is farmer
                     farmer = Farmer.query.get(order.farmer_id)
                     if farmer:
