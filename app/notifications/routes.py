@@ -1,24 +1,40 @@
 from flask import Blueprint, request, jsonify
-from flask_jwt_extended import jwt_required, get_jwt_identity
+from flask_jwt_extended import jwt_required, get_jwt_identity, verify_jwt_in_request
 from app.models import db, Notification, User, Order, Farmer, Buyer
 from app.models import create_notification
+import uuid
 
+# Removed strict_slashes=False from here to prevent server crash
 notifications_bp = Blueprint('notifications', __name__)
 
+def get_uuid(val):
+    """Helper to convert string to UUID."""
+    if isinstance(val, uuid.UUID):
+        return val
+    try:
+        return uuid.UUID(val)
+    except (ValueError, AttributeError):
+        return None
 
-@notifications_bp.route('/', methods=['GET'])
+@notifications_bp.route('/', methods=['GET', 'OPTIONS'])
 @jwt_required()
 def get_notifications():
     """Get all notifications for the current user"""
+    if request.method == 'OPTIONS':
+        return jsonify({"status": "ok"}), 200
+
     try:
-        user_id = get_jwt_identity()
+        user_id = get_uuid(get_jwt_identity())
+        
+        if not user_id:
+            return jsonify({'error': 'Invalid user ID'}), 400
         
         # Get pagination parameters
         page = request.args.get('page', 1, type=int)
         per_page = request.args.get('per_page', 20, type=int)
         unread_only = request.args.get('unread_only', False, type=bool)
         
-        # Build query
+        # Build query - use UUID for filtering
         query = Notification.query.filter_by(user_id=user_id)
         
         if unread_only:
@@ -39,25 +55,39 @@ def get_notifications():
         }), 200
         
     except Exception as e:
+        import traceback
+        traceback.print_exc()
         return jsonify({'error': str(e)}), 500
 
 
-@notifications_bp.route('/unread-count', methods=['GET'])
+@notifications_bp.route('/unread-count', methods=['GET', 'OPTIONS'])
 @jwt_required()
 def get_unread_count():
-    """Get the count of unread notifications"""
+    """Get the count of unread notifications - Preflight Handled"""
+    if request.method == 'OPTIONS':
+        return jsonify({"status": "ok"}), 200
+
     try:
-        user_id = get_jwt_identity()
+        user_id = get_uuid(get_jwt_identity())
+        
+        if not user_id:
+            return jsonify({'error': 'Invalid user ID'}), 400
+            
         count = Notification.query.filter_by(user_id=user_id, is_read=False).count()
         return jsonify({'unread_count': count}), 200
     except Exception as e:
+        import traceback
+        traceback.print_exc()
         return jsonify({'error': str(e)}), 500
 
 
-@notifications_bp.route('/<int:notification_id>/read', methods=['PUT'])
+@notifications_bp.route('/<int:notification_id>/read', methods=['PUT', 'OPTIONS'])
 @jwt_required()
 def mark_notification_read(notification_id):
     """Mark a single notification as read"""
+    if request.method == 'OPTIONS':
+        return jsonify({"status": "ok"}), 200
+
     try:
         user_id = get_jwt_identity()
         notification = Notification.query.filter_by(
@@ -77,10 +107,13 @@ def mark_notification_read(notification_id):
         return jsonify({'error': str(e)}), 500
 
 
-@notifications_bp.route('/read-all', methods=['PUT'])
+@notifications_bp.route('/read-all', methods=['PUT', 'OPTIONS'])
 @jwt_required()
 def mark_all_read():
     """Mark all notifications as read for the current user"""
+    if request.method == 'OPTIONS':
+        return jsonify({"status": "ok"}), 200
+
     try:
         user_id = get_jwt_identity()
         Notification.query.filter_by(user_id=user_id, is_read=False).update({
@@ -94,10 +127,13 @@ def mark_all_read():
         return jsonify({'error': str(e)}), 500
 
 
-@notifications_bp.route('/<int:notification_id>', methods=['DELETE'])
+@notifications_bp.route('/<int:notification_id>', methods=['DELETE', 'OPTIONS'])
 @jwt_required()
 def delete_notification(notification_id):
     """Delete a notification"""
+    if request.method == 'OPTIONS':
+        return jsonify({"status": "ok"}), 200
+
     try:
         user_id = get_jwt_identity()
         notification = Notification.query.filter_by(
@@ -116,16 +152,15 @@ def delete_notification(notification_id):
         return jsonify({'error': str(e)}), 500
 
 
-# Helper function to create notifications from other routes
+# --- Helper functions (PEP 8 Compliant) ---
+
 def notify_new_order(order_id, buyer_id, farmer_id, total_amount):
     """Create notifications for new order - to farmer"""
     try:
-        # Get farmer's user_id
         farmer = Farmer.query.get(farmer_id)
         if not farmer:
             return
         
-        # Notify farmer
         create_notification(
             user_id=farmer.user_id,
             type='new_order',
@@ -135,7 +170,6 @@ def notify_new_order(order_id, buyer_id, farmer_id, total_amount):
             related_type='order'
         )
         
-        # Notify buyer
         buyer = Buyer.query.get(buyer_id)
         if buyer:
             create_notification(
@@ -153,7 +187,6 @@ def notify_new_order(order_id, buyer_id, farmer_id, total_amount):
 def notify_new_negotiation(session_id, buyer_id, farmer_id, animal_name):
     """Create notifications for new negotiation"""
     try:
-        # Notify farmer
         farmer = Farmer.query.get(farmer_id)
         if farmer:
             create_notification(
@@ -171,7 +204,6 @@ def notify_new_negotiation(session_id, buyer_id, farmer_id, animal_name):
 def notify_negotiation_update(session_id, buyer_id, farmer_id, status, message):
     """Create notifications for negotiation status updates"""
     try:
-        # Notify farmer if buyer updated
         if buyer_id:
             buyer = Buyer.query.get(buyer_id)
             if buyer:
@@ -183,8 +215,6 @@ def notify_negotiation_update(session_id, buyer_id, farmer_id, status, message):
                     related_id=session_id,
                     related_type='negotiation'
                 )
-        
-        # Notify buyer if farmer updated
         if farmer_id:
             farmer = Farmer.query.get(farmer_id)
             if farmer:
@@ -203,7 +233,6 @@ def notify_negotiation_update(session_id, buyer_id, farmer_id, status, message):
 def notify_new_dispute(dispute_id, filer_id, target_id, reason):
     """Create notifications for new dispute"""
     try:
-        # Notify the target (farmer or buyer)
         if target_id:
             create_notification(
                 user_id=target_id,
@@ -213,8 +242,6 @@ def notify_new_dispute(dispute_id, filer_id, target_id, reason):
                 related_id=dispute_id,
                 related_type='dispute'
             )
-        
-        # Confirm to filer
         create_notification(
             user_id=filer_id,
             type='dispute_filed',

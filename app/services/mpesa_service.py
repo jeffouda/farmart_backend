@@ -70,6 +70,9 @@ class MpesaService:
     @classmethod
     def stk_push(cls, phone, amount, order_id):
         """Initiates the STK Push on the buyer's phone."""
+        print("\n--- STK PUSH TRIGGERED ---")  # Add this
+        print(f"Phone: {phone}, Amount: {amount}")  # Add this
+        
         token = cls.get_access_token()
         if not token:
             return {"error": "Failed to generate M-Pesa access token"}

@@ -14,8 +14,7 @@ from . import orders_bp
 import uuid
 from datetime import datetime
 
-# Import your MPESA service (Create this file if it doesn't exist)
-# from app.services.mpesa_service import trigger_stk_push
+from app.services.mpesa_service import MpesaService
 
 def get_uuid(val):
     """Helper to convert string to UUID."""
@@ -107,10 +106,21 @@ def create_order():
         if not phone_number:
             return jsonify({"error": "Phone number required for M-Pesa"}), 400
         
-        # In a real app, you'd call your Daraja Service here:
-        # success = trigger_stk_push(phone_number, total_bill, created_orders[0].id)
-        # For now, we log it for your dev environment:
-        print(f"DEBUG: Triggering STK Push to {phone_number} for KES {total_bill}")
+        # Trigger the actual STK Push
+        stk_response = MpesaService.stk_push(phone_number, total_bill, str(created_orders[0].id))
+        
+        # Check if STK Push was initiated successfully
+        if stk_response.get('ResponseCode') == '0':
+            checkout_id = stk_response.get('CheckoutRequestID')
+            # Update the order with checkout ID for tracking
+            created_orders[0].checkout_id = checkout_id
+            current_app.logger.info(f"STK Push initiated: {checkout_id} for Order {created_orders[0].id}")
+        else:
+            current_app.logger.error(f"STK Push failed: {stk_response}")
+            return jsonify({
+                "error": "Failed to initiate M-Pesa payment",
+                "details": stk_response
+            }), 400
 
     db.session.commit()
 
@@ -129,6 +139,8 @@ def poll_order_status(order_id):
     
     if not order:
         return jsonify({"error": "Order not found"}), 404
+    
+    current_app.logger.info(f"POLL DEBUG - Order {order_id}: status={order.status}, payment_status={order.payment_status}, checkout_id={order.checkout_id}")
     
     return jsonify({
         "order_id": str(order.id),
@@ -167,4 +179,118 @@ def confirm_delivery(order_id):
     db.session.commit()
     return jsonify({"message": "Funds released to farmer"}), 200
 
-# ... (Keep get_orders, get_order, and stats as they were)
+@orders_bp.route("/<order_id>", methods=["GET"])
+@jwt_required()
+def get_order(order_id):
+    """Get order by ID"""
+    order_uuid = get_uuid(order_id)
+    order = Order.query.get(order_uuid)
+    
+    if not order:
+        return jsonify({"error": "Order not found"}), 404
+    
+    return jsonify({
+        "id": str(order.id),
+        "buyer_id": str(order.buyer_id),
+        "farmer_id": str(order.farmer_id),
+        "items": order.items,
+        "total_amount": float(order.total_amount),
+        "status": order.status,
+        "payment_status": order.payment_status,
+        "payment_method": order.payment_method,
+        "checkout_id": order.checkout_id,
+        "mpesa_receipt": order.mpesa_receipt,
+        "created_at": order.created_at.isoformat() if order.created_at else None,
+        "updated_at": order.updated_at.isoformat() if order.updated_at else None,
+        "farmer": {
+            "id": str(order.farmer.id),
+            "farm_name": order.farmer.farm_name,
+            "phone_number": order.farmer.phone_number,
+        } if order.farmer else None,
+    }), 200
+
+@orders_bp.route("/", methods=["GET"])
+@jwt_required()
+def get_orders():
+    """Get all orders for current user (buyer or farmer)"""
+    user_id = uuid.UUID(get_jwt_identity())
+    user = User.query.get(user_id)
+    
+    if not user:
+        return jsonify({"error": "User not found"}), 404
+    
+    if user.role.value == "buyer":
+        buyer = Buyer.query.filter_by(user_id=user_id).first()
+        if not buyer:
+            return jsonify({"error": "Buyer profile not found"}), 404
+        orders = Order.query.filter_by(buyer_id=buyer.id).order_by(Order.created_at.desc()).all()
+    elif user.role.value == "farmer":
+        farmer = Farmer.query.filter_by(user_id=user_id).first()
+        if not farmer:
+            return jsonify({"error": "Farmer profile not found"}), 404
+        orders = Order.query.filter_by(farmer_id=farmer.id).order_by(Order.created_at.desc()).all()
+    else:
+        # Admin sees all orders
+        orders = Order.query.order_by(Order.created_at.desc()).all()
+    
+    return jsonify([
+        {
+            "id": str(order.id),
+            "buyer_id": str(order.buyer_id),
+            "farmer_id": str(order.farmer_id),
+            "items": order.items,
+            "total_amount": float(order.total_amount),
+            "status": order.status,
+            "payment_status": order.payment_status,
+            "payment_method": order.payment_method,
+            "created_at": order.created_at.isoformat() if order.created_at else None,
+        }
+        for order in orders
+    ]), 200
+
+@orders_bp.route("/stats", methods=["GET"])
+@jwt_required()
+def get_order_stats():
+    """Get order statistics for dashboard"""
+    user_id = uuid.UUID(get_jwt_identity())
+    user = User.query.get(user_id)
+    
+    if not user:
+        return jsonify({"error": "User not found"}), 404
+    
+    if user.role.value == "buyer":
+        buyer = Buyer.query.filter_by(user_id=user_id).first()
+        if not buyer:
+            return jsonify({"error": "Buyer profile not found"}), 404
+        
+        orders = Order.query.filter_by(buyer_id=buyer.id).all()
+        pending = sum(1 for o in orders if o.status == "pending")
+        paid = sum(1 for o in orders if o.payment_status == "paid")
+        delivered = sum(1 for o in orders if o.status == "delivered")
+        total_spent = sum(float(o.total_amount) for o in orders if o.payment_status == "paid")
+    elif user.role.value == "farmer":
+        farmer = Farmer.query.filter_by(user_id=user_id).first()
+        if not farmer:
+            return jsonify({"error": "Farmer profile not found"}), 404
+        
+        orders = Order.query.filter_by(farmer_id=farmer.id).all()
+        pending = sum(1 for o in orders if o.status == "pending")
+        paid = sum(1 for o in orders if o.payment_status == "paid")
+        delivered = sum(1 for o in orders if o.status == "delivered")
+        total_earned = sum(float(o.total_amount) for o in orders if o.payment_status == "paid")
+        total_spent = total_earned
+    else:
+        # Admin stats
+        orders = Order.query.all()
+        pending = sum(1 for o in orders if o.status == "pending")
+        paid = sum(1 for o in orders if o.payment_status == "paid")
+        delivered = sum(1 for o in orders if o.status == "delivered")
+        total_spent = sum(float(o.total_amount) for o in orders)
+    
+    return jsonify({
+        "pending": pending,
+        "paid": paid,
+        "delivered": delivered,
+        "total": len(orders),
+        "total_amount": total_spent
+    }), 200

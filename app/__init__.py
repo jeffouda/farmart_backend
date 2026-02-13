@@ -13,7 +13,7 @@ jwt = JWTManager()
 def create_app(config_name="default"):
     app = Flask(__name__)
 
-    # Disable strict slashes to prevent redirect issues with CORS
+    # Disable strict slashes to prevent 404/redirect issues with CORS
     app.url_map.strict_slashes = False
 
     # Load configuration from config.py
@@ -25,17 +25,46 @@ def create_app(config_name="default"):
     migrate.init_app(app, db)
     jwt.init_app(app)
 
-    # Configure CORS - Single configuration for both dev and production
-    # Allow localhost for dev, and the Render frontend for production
+    # JWT Error Handlers - Return proper JSON responses instead of 401 text
+    @jwt.invalid_token_loader
+    def invalid_token_callback(error_string):
+        return jsonify({
+            "error": "Invalid token",
+            "message": error_string,
+            "code": "INVALID_TOKEN"
+        }), 401
+
+    @jwt.expired_token_loader
+    def expired_token_callback(jwt_header, jwt_payload):
+        return jsonify({
+            "error": "Token has expired",
+            "message": "Please login again",
+            "code": "TOKEN_EXPIRED"
+        }), 401
+
+    @jwt.unauthorized_loader
+    def unauthorized_callback(error_string):
+        return jsonify({
+            "error": "Authorization required",
+            "message": error_string or "Missing authorization token",
+            "code": "UNAUTHORIZED"
+        }), 401
+
+    # Updated Origins to include your specific Ngrok tunnel
+    origins = [
+        "http://localhost:5173",
+        "http://127.0.0.1:5173",
+        "http://localhost:3000",
+        "https://farmart-com.onrender.com",
+        "https://aglisten-armida-confarreate.ngrok-free.dev" # Added for M-Pesa testing
+    ]
+
+    # Configure CORS
     CORS(
         app,
         resources={
             r"/api/*": {
-                "origins": [
-                    "http://localhost:5173",
-                    "http://127.0.0.1:5173",
-                    "https://farmart-com.onrender.com",
-                ],
+                "origins": origins,
                 "methods": ["GET", "POST", "PUT", "DELETE", "OPTIONS", "PATCH"],
                 "allow_headers": [
                     "Content-Type",
@@ -43,6 +72,7 @@ def create_app(config_name="default"):
                     "ngrok-skip-browser-warning",
                     "Accept",
                     "Origin",
+                    "X-Requested-With"
                 ],
                 "supports_credentials": True,
                 "expose_headers": ["Content-Type", "Authorization"],
@@ -62,7 +92,7 @@ def create_app(config_name="default"):
     from app.analytics import analytics_bp
     from app.negotiation import negotiation_bp
     from app.payments import payment_bp
-    from app.notifications import notifications_bp
+    from app.notifications.routes import notifications_bp # Pointing to correct routes file
     from app.admin import admin_bp
 
     app.register_blueprint(auth_bp, url_prefix="/api/auth")
@@ -80,16 +110,16 @@ def create_app(config_name="default"):
 
     # Serve uploaded images
     uploads_dir = os.path.join(os.getcwd(), "uploads")
-    if os.path.exists(uploads_dir):
+    if not os.path.exists(uploads_dir):
+        os.makedirs(uploads_dir)
 
-        @app.route("/uploads/<path:filename>")
-        def serve_upload(filename):
-            return send_from_directory(uploads_dir, filename)
+    @app.route("/uploads/<path:filename>")
+    def serve_upload(filename):
+        return send_from_directory(uploads_dir, filename)
 
     # Serve static uploads
     static_uploads_dir = os.path.join(os.path.dirname(__file__), "static", "uploads")
     if os.path.exists(static_uploads_dir):
-
         @app.route("/static/uploads/<path:filename>")
         def serve_static_upload(filename):
             return send_from_directory(static_uploads_dir, filename)
@@ -108,16 +138,11 @@ def create_app(config_name="default"):
             "status": "running",
             "endpoints": {
                 "health": "/api/health",
-                "auth": "/api/auth/login, /api/auth/register, /api/auth/me",
-                "livestock": "/api/livestock/all, /api/livestock/<id>",
+                "auth": "/api/auth/",
+                "livestock": "/api/livestock/",
                 "orders": "/api/orders/",
-                "wishlist": "/api/wishlist/",
-                "bargain": "/api/bargain/sessions",
-                "reviews": "/api/reviews/",
-                "disputes": "/api/disputes/",
-                "analytics": "/api/analytics/farmer",
-                "negotiation": "/api/negotiation/<livestock_id>",
                 "payments": "/api/payments/",
+                "notifications": "/api/notifications/"
             },
         }), 200
 

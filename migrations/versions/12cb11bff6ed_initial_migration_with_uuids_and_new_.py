@@ -1,8 +1,8 @@
-"""initial setup with escrow
+"""Initial migration with UUIDs and new tables
 
-Revision ID: ece1d4108040
+Revision ID: 12cb11bff6ed
 Revises: 
-Create Date: 2026-02-10 01:28:13.881094
+Create Date: 2026-02-13 06:39:55.615636
 
 """
 from alembic import op
@@ -10,7 +10,7 @@ import sqlalchemy as sa
 
 
 # revision identifiers, used by Alembic.
-revision = 'ece1d4108040'
+revision = '12cb11bff6ed'
 down_revision = None
 branch_labels = None
 depends_on = None
@@ -33,9 +33,7 @@ def upgrade():
     sa.Column('updated_at', sa.DateTime(), nullable=True),
     sa.PrimaryKeyConstraint('id')
     )
-    with op.batch_alter_table('users', schema=None) as batch_op:
-        batch_op.create_index(batch_op.f('ix_users_email'), ['email'], unique=True)
-
+    op.create_index(op.f('ix_users_email'), 'users', ['email'], unique=True)
     op.create_table('buyers',
     sa.Column('id', sa.UUID(), nullable=False),
     sa.Column('user_id', sa.UUID(), nullable=False),
@@ -59,6 +57,20 @@ def upgrade():
     sa.ForeignKeyConstraint(['user_id'], ['users.id'], ),
     sa.PrimaryKeyConstraint('id'),
     sa.UniqueConstraint('phone_number')
+    )
+    op.create_table('notifications',
+    sa.Column('id', sa.Integer(), autoincrement=True, nullable=False),
+    sa.Column('user_id', sa.UUID(), nullable=False),
+    sa.Column('type', sa.String(length=30), nullable=False),
+    sa.Column('title', sa.String(length=100), nullable=False),
+    sa.Column('message', sa.Text(), nullable=False),
+    sa.Column('related_id', sa.UUID(), nullable=True),
+    sa.Column('related_type', sa.String(length=30), nullable=True),
+    sa.Column('is_read', sa.Boolean(), nullable=True),
+    sa.Column('read_at', sa.DateTime(), nullable=True),
+    sa.Column('created_at', sa.DateTime(), nullable=True),
+    sa.ForeignKeyConstraint(['user_id'], ['users.id'], ),
+    sa.PrimaryKeyConstraint('id')
     )
     op.create_table('animals',
     sa.Column('id', sa.UUID(), nullable=False),
@@ -92,6 +104,19 @@ def upgrade():
     sa.ForeignKeyConstraint(['animal_id'], ['animals.id'], ),
     sa.ForeignKeyConstraint(['buyer_id'], ['buyers.id'], ),
     sa.ForeignKeyConstraint(['farmer_id'], ['farmers.id'], ),
+    sa.PrimaryKeyConstraint('id')
+    )
+    op.create_table('messages',
+    sa.Column('id', sa.Integer(), autoincrement=True, nullable=False),
+    sa.Column('sender_id', sa.UUID(), nullable=False),
+    sa.Column('receiver_id', sa.UUID(), nullable=False),
+    sa.Column('livestock_id', sa.UUID(), nullable=False),
+    sa.Column('content', sa.Text(), nullable=False),
+    sa.Column('is_read', sa.Boolean(), nullable=True),
+    sa.Column('created_at', sa.DateTime(), nullable=True),
+    sa.ForeignKeyConstraint(['livestock_id'], ['animals.id'], ),
+    sa.ForeignKeyConstraint(['receiver_id'], ['users.id'], ),
+    sa.ForeignKeyConstraint(['sender_id'], ['users.id'], ),
     sa.PrimaryKeyConstraint('id')
     )
     op.create_table('wishlists',
@@ -135,6 +160,50 @@ def upgrade():
     sa.ForeignKeyConstraint(['farmer_id'], ['farmers.id'], ),
     sa.PrimaryKeyConstraint('id')
     )
+    op.create_table('pending_checkouts',
+    sa.Column('id', sa.UUID(), nullable=False),
+    sa.Column('buyer_id', sa.UUID(), nullable=False),
+    sa.Column('farmer_id', sa.UUID(), nullable=False),
+    sa.Column('bargain_id', sa.Integer(), nullable=True),
+    sa.Column('items', sa.JSON(), nullable=False),
+    sa.Column('total_amount', sa.Numeric(precision=10, scale=2), nullable=False),
+    sa.Column('payment_method', sa.String(length=50), nullable=True),
+    sa.Column('checkout_id', sa.String(length=100), nullable=True),
+    sa.Column('status', sa.String(length=20), nullable=True),
+    sa.Column('created_at', sa.DateTime(), nullable=False),
+    sa.Column('updated_at', sa.DateTime(), nullable=True),
+    sa.ForeignKeyConstraint(['bargain_id'], ['bargain_sessions.id'], ),
+    sa.ForeignKeyConstraint(['buyer_id'], ['buyers.id'], ),
+    sa.ForeignKeyConstraint(['farmer_id'], ['farmers.id'], ),
+    sa.PrimaryKeyConstraint('id')
+    )
+    op.create_table('disputes',
+    sa.Column('id', sa.UUID(), nullable=False),
+    sa.Column('ticket_id', sa.String(length=20), nullable=False),
+    sa.Column('order_id', sa.UUID(), nullable=True),
+    sa.Column('filer_id', sa.UUID(), nullable=False),
+    sa.Column('target_id', sa.UUID(), nullable=True),
+    sa.Column('dispute_type', sa.String(length=20), nullable=True),
+    sa.Column('reason', sa.String(length=50), nullable=False),
+    sa.Column('description', sa.Text(), nullable=False),
+    sa.Column('resolution', sa.String(length=20), nullable=True),
+    sa.Column('status', sa.String(length=20), nullable=True),
+    sa.Column('admin_notes', sa.Text(), nullable=True),
+    sa.Column('admin_decision', sa.String(length=20), nullable=True),
+    sa.Column('farmer_response', sa.Text(), nullable=True),
+    sa.Column('farmer_response_at', sa.DateTime(), nullable=True),
+    sa.Column('farmer_evidence', sa.String(length=255), nullable=True),
+    sa.Column('buyer_response', sa.Text(), nullable=True),
+    sa.Column('buyer_response_at', sa.DateTime(), nullable=True),
+    sa.Column('buyer_evidence', sa.String(length=255), nullable=True),
+    sa.Column('created_at', sa.DateTime(), nullable=False),
+    sa.Column('updated_at', sa.DateTime(), nullable=True),
+    sa.ForeignKeyConstraint(['filer_id'], ['users.id'], ),
+    sa.ForeignKeyConstraint(['order_id'], ['orders.id'], ),
+    sa.ForeignKeyConstraint(['target_id'], ['users.id'], ),
+    sa.PrimaryKeyConstraint('id'),
+    sa.UniqueConstraint('ticket_id')
+    )
     op.create_table('escrow_records',
     sa.Column('id', sa.UUID(), nullable=False),
     sa.Column('order_id', sa.UUID(), nullable=False),
@@ -146,7 +215,9 @@ def upgrade():
     sa.Column('created_at', sa.DateTime(), nullable=False),
     sa.Column('updated_at', sa.DateTime(), nullable=True),
     sa.ForeignKeyConstraint(['order_id'], ['orders.id'], ),
-    sa.PrimaryKeyConstraint('id')
+    sa.PrimaryKeyConstraint('id'),
+    sa.UniqueConstraint('b2c_conversation_id'),
+    sa.UniqueConstraint('mpesa_receipt')
     )
     op.create_table('reviews',
     sa.Column('id', sa.UUID(), nullable=False),
@@ -170,15 +241,17 @@ def downgrade():
     # ### commands auto generated by Alembic - please adjust! ###
     op.drop_table('reviews')
     op.drop_table('escrow_records')
+    op.drop_table('disputes')
+    op.drop_table('pending_checkouts')
     op.drop_table('orders')
     op.drop_table('bargain_messages')
     op.drop_table('wishlists')
+    op.drop_table('messages')
     op.drop_table('bargain_sessions')
     op.drop_table('animals')
+    op.drop_table('notifications')
     op.drop_table('farmers')
     op.drop_table('buyers')
-    with op.batch_alter_table('users', schema=None) as batch_op:
-        batch_op.drop_index(batch_op.f('ix_users_email'))
-
+    op.drop_index(op.f('ix_users_email'), table_name='users')
     op.drop_table('users')
     # ### end Alembic commands ###

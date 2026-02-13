@@ -10,9 +10,11 @@ app = create_app()
 # It's best to ensure this is a list. If your .env has a comma-separated string, 
 # you might need: app.config.get('ALLOWED_ORIGINS', "").split(",")
 origins = app.config.get('ALLOWED_ORIGINS', [
+    "http://localhost:5173",          # Vite Default
+    "http://127.0.0.1:5173",         # Vite Alternative
     "http://localhost:3000",
-    "http://127.0.0.1:3000",
-    "https://farmart-com.onrender.com"
+    "https://farmart-com.onrender.com",
+    "https://aglisten-armida-confarreate.ngrok-free.dev" # Your Ngrok Tunnel
 ])
 
 # 3. Configure CORS
