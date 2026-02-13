@@ -25,9 +25,18 @@ def trigger_payment():
     amount = data.get('total_amount')
     items = data.get('items')
     farmer_id = data.get('farmer_id')
+    order_id = data.get('order_id')  # Link to existing order if any
 
-    if not all([phone, amount, items, farmer_id]):
+    if not all([phone, amount, items]):
         return jsonify({"error": "Missing required payment fields"}), 400
+
+    # Get farmer_id from items if not provided
+    if not farmer_id and items:
+        first_item = items[0] if isinstance(items, list) else items
+        farmer_id = first_item.get('farmer_id')
+
+    if not farmer_id:
+        return jsonify({"error": "Farmer ID is required"}), 400
 
     try:
         # 1. Initiate STK Push
@@ -45,13 +54,14 @@ def trigger_payment():
                 total_amount=amount,
                 items=items,
                 status="pending",
-                checkout_id=checkout_id 
+                checkout_id=checkout_id,
+                order_id=order_id  # Link to existing order
             )
             
             db.session.add(pending)
             db.session.commit()
             
-            current_app.logger.info(f"STK Push initiated: {checkout_id}. Pending record created.")
+            current_app.logger.info(f"STK Push initiated: {checkout_id}. Pending record created with order_id: {order_id}")
             
             return jsonify({
                 "message": "STK Push initiated", 
@@ -146,7 +156,47 @@ def mpesa_stk_callback():
         items_meta = data.get('CallbackMetadata', {}).get('Item', [])
         receipt = next((item.get('Value') for item in items_meta if item.get('Name') == 'MpesaReceiptNumber'), "N/A")
         
-        # 4. Create the Actual Order
+        # 4. Find the order to update - check multiple paths
+        existing_order = None
+        
+        # First, try to find by order_id from PendingCheckout
+        if pending.order_id:
+            existing_order = Order.query.get(pending.order_id)
+            current_app.logger.info(f"Looking for order by order_id: {pending.order_id}")
+        
+        # Fallback: try by checkout_id
+        if not existing_order:
+            existing_order = Order.query.filter_by(checkout_id=checkout_id).first()
+            current_app.logger.info(f"Looking for order by checkout_id: {checkout_id}")
+        
+        if existing_order:
+            # Update existing order - this is the one the frontend is polling!
+            existing_order.status = "paid"
+            existing_order.payment_status = "paid"
+            existing_order.mpesa_receipt = receipt
+            existing_order.checkout_id = checkout_id  # Ensure checkout_id is set
+            
+            # Update escrow
+            escrow = EscrowRecord.query.filter_by(order_id=existing_order.id).first()
+            if escrow:
+                escrow.status = "held"
+                escrow.mpesa_receipt = receipt
+            
+            # Mark animals as sold
+            for item_data in (existing_order.items or []):
+                animal = Animal.query.get(item_data.get('animal_id'))
+                if animal:
+                    animal.status = "sold"
+                    animal.is_available = False
+            
+            # Cleanup pending
+            pending.status = "completed"
+            db.session.commit()
+            
+            current_app.logger.info(f"✅ Order {existing_order.id} updated to paid status.")
+            return jsonify({"ResultCode": 0, "ResultDesc": "Accepted"}), 200
+        
+        # 5. No existing order - create new one (fallback)
         new_order = Order(
             id=str(uuid.uuid4()),
             buyer_id=pending.buyer_id,
@@ -159,14 +209,14 @@ def mpesa_stk_callback():
         )
         db.session.add(new_order)
         
-        # 5. Mark Animal as Sold
+        # 6. Mark Animal as Sold
         for item_data in (pending.items or []):
             animal = Animal.query.get(item_data.get('animal_id'))
             if animal:
                 animal.status = "sold"
                 animal.is_available = False
 
-        # 6. Create Escrow Record
+        # 7. Create Escrow Record
         farmer = Farmer.query.get(pending.farmer_id)
         escrow = EscrowRecord(
             order_id=new_order.id,
@@ -181,7 +231,7 @@ def mpesa_stk_callback():
         pending.status = "completed"
         db.session.commit()
         
-        current_app.logger.info(f"✅ Order {new_order.id} verified and Escrowed.")
+        current_app.logger.info(f"✅ Order {new_order.id} created and Escrowed.")
         return jsonify({"ResultCode": 0, "ResultDesc": "Accepted"}), 200
         
     except Exception as e:
