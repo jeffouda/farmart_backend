@@ -484,7 +484,7 @@ class PendingCheckout(db.Model, TimestampMixin):
     bargain_id = db.Column(db.Integer, db.ForeignKey("bargain_sessions.id"), nullable=True)
     
     # Link to the order created by /api/orders/
-    order_id = db.Column(db.String(36), nullable=True)
+    order_id = db.Column(UUID(as_uuid=True), db.ForeignKey('orders.id'), nullable=True)
     
     items = db.Column(db.JSON, nullable=False)
     total_amount = db.Column(db.Numeric(10, 2), nullable=False)
