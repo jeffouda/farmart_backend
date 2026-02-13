@@ -6,7 +6,7 @@ from app.models import create_notification
 notifications_bp = Blueprint('notifications', __name__)
 
 
-@notifications_bp.route('/', methods=['GET'])
+@notifications_bp.route('', methods=['GET'])
 @jwt_required()
 def get_notifications():
     """Get all notifications for the current user"""
