@@ -25,6 +25,16 @@ def create_app(config_name="default"):
     migrate.init_app(app, db)
     jwt.init_app(app)
 
+
+    # Initialize CORS with allowed origins
+    CORS(app, resources={
+        r"/api/*": {
+            "origins": app_config.ALLOWED_ORIGINS,
+            "methods": ["GET", "POST", "PUT", "DELETE", "OPTIONS"],
+            "allow_headers": ["Content-Type", "Authorization"]
+        }
+    })
+
     # Configure CORS - Single configuration for both dev and production
     # Allow localhost for dev, and the Render frontend for production
     CORS(
@@ -50,6 +60,7 @@ def create_app(config_name="default"):
             }
         },
     )
+
 
     # Register blueprints
     from app.auth import auth_bp
