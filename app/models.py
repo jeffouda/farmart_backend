@@ -9,9 +9,9 @@ db = SQLAlchemy()
 
 # Role Definitions using Enum for Type Safety
 class UserRole(str, Enum):
-    ADMIN = "admin"
-    FARMER = "farmer"
-    BUYER = "buyer"
+    ADMIN = "ADMIN"
+    FARMER = "FARMER"
+    BUYER = "BUYER"
 
 # Base Mixin for Audit Trails
 class TimestampMixin:

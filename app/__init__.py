@@ -80,8 +80,8 @@ def create_app(config_name="default"):
                 connection.execute(text("COMMIT"))
                 
                 # --- Fix Enum Case/Value Issues ---
-                # This adds 'farmer' and 'buyer' to the DB type if they don't exist
-                for role in ['farmer', 'buyer', 'admin']:
+                # This adds 'FARMER', 'BUYER', 'ADMIN' to the DB type (uppercase to match PostgreSQL)
+                for role in ['FARMER', 'BUYER', 'ADMIN']:
                     try:
                         connection.execute(text(f"ALTER TYPE userrole ADD VALUE '{role}';"))
                         connection.execute(text("COMMIT"))
@@ -114,7 +114,7 @@ def create_app(config_name="default"):
             if not admin:
                 admin = User(
                     email="admin@farmart.com",
-                    role=UserRole.ADMIN,
+                    role=UserRole.ADMIN,  # Use uppercase enum
                     full_name="Admin User",
                     is_active=True,
                 )
@@ -123,8 +123,9 @@ def create_app(config_name="default"):
                 db.session.commit()
                 print("✅ Admin user created: admin@farmart.com / admin123")
             else:
-                # Ensure admin has correct role
-                if admin.role != UserRole.ADMIN:
+                # Ensure admin has correct role (handle both uppercase and lowercase)
+                current_role = admin.role.value if hasattr(admin.role, 'value') else str(admin.role)
+                if current_role.upper() != "ADMIN":
                     admin.role = UserRole.ADMIN
                     db.session.commit()
                     print("✅ Admin user role updated to admin")
