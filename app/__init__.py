@@ -5,10 +5,10 @@ from .models import db
 from flask_migrate import Migrate
 from flask_jwt_extended import JWTManager
 from config import config
+from sqlalchemy import text
 
 migrate = Migrate()
 jwt = JWTManager()
-
 
 def create_app(config_name="default"):
     app = Flask(__name__)
@@ -24,6 +24,7 @@ def create_app(config_name="default"):
     db.init_app(app)
     migrate.init_app(app, db)
     jwt.init_app(app)
+
 
     # JWT Error Handlers - Return proper JSON responses instead of 401 text
     @jwt.invalid_token_loader
@@ -60,8 +61,63 @@ def create_app(config_name="default"):
     ]
 
     # Configure CORS
+
+    # --- DATABASE INITIALIZATION & MIGRATIONS ---
+    with app.app_context():
+        try:
+            # 1. Import models
+            from .models import User, Animal, Farmer, Buyer, Order, Review, PendingCheckout
+            
+            # 2. Basic table creation
+            print("Creating database tables...")
+            db.create_all()
+            
+            # 3. PostgreSQL Specific Fixes (Post-creation)
+            # This handles the Enum mismatch and the missing order_id column
+            if "postgresql" in app.config.get('SQLALCHEMY_DATABASE_URI', ''):
+                connection = db.engine.connect()
+                # Use a transaction-less execution for ALTER TYPE
+                connection.execute(text("COMMIT"))
+                
+                # --- Fix Enum Case/Value Issues ---
+                # This adds 'farmer' and 'buyer' to the DB type if they don't exist
+                for role in ['farmer', 'buyer', 'admin']:
+                    try:
+                        connection.execute(text(f"ALTER TYPE userrole ADD VALUE '{role}';"))
+                        connection.execute(text("COMMIT"))
+                        print(f"✅ Production: Added {role} to userrole enum.")
+                    except Exception:
+                        connection.execute(text("COMMIT")) # Already exists
+                
+                # --- Fix Missing order_id Column ---
+                try:
+                    # PostgreSQL DO block to add column if missing
+                    connection.execute(text("""
+                        DO $$ 
+                        BEGIN 
+                            IF NOT EXISTS (SELECT 1 FROM information_schema.columns 
+                                           WHERE table_name='pending_checkouts' AND column_name='order_id') THEN
+                                ALTER TABLE pending_checkouts ADD COLUMN order_id UUID;
+                            END IF;
+                        END $$;
+                    """))
+                    connection.execute(text("COMMIT"))
+                    print("✅ Production: order_id column verified.")
+                except Exception as e:
+                    print(f"⚠️ Column migration notice: {e}")
+                    connection.execute(text("COMMIT"))
+
+                connection.close()
+
+            print("✅ Database initialization sequence completed!")
+        except Exception as e:
+            print(f"❌ Database initialization error: {e}")
+
+    # --- UNIFIED CORS CONFIGURATION ---
+
     CORS(
         app,
+        supports_credentials=True,
         resources={
             r"/api/*": {
                 "origins": origins,
@@ -74,9 +130,8 @@ def create_app(config_name="default"):
                     "Origin",
                     "X-Requested-With"
                 ],
-                "supports_credentials": True,
                 "expose_headers": ["Content-Type", "Authorization"],
-                "max_age": 86400,  # Cache preflight for 24 hours
+                "max_age": 86400,
             }
         },
     )
@@ -108,8 +163,9 @@ def create_app(config_name="default"):
     app.register_blueprint(notifications_bp, url_prefix="/api/notifications")
     app.register_blueprint(admin_bp, url_prefix="/api/admin")
 
-    # Serve uploaded images
+    # Serve uploads logic...
     uploads_dir = os.path.join(os.getcwd(), "uploads")
+
     if not os.path.exists(uploads_dir):
         os.makedirs(uploads_dir)
 
@@ -117,19 +173,16 @@ def create_app(config_name="default"):
     def serve_upload(filename):
         return send_from_directory(uploads_dir, filename)
 
-    # Serve static uploads
     static_uploads_dir = os.path.join(os.path.dirname(__file__), "static", "uploads")
     if os.path.exists(static_uploads_dir):
         @app.route("/static/uploads/<path:filename>")
         def serve_static_upload(filename):
             return send_from_directory(static_uploads_dir, filename)
 
-    # Health check endpoint
     @app.route("/api/health", methods=["GET"])
     def health_check():
         return jsonify({"status": "online", "message": "System is healthy"}), 200
 
-    # Root endpoint - API info
     @app.route("/", methods=["GET"])
     def root():
         return jsonify({
@@ -138,11 +191,13 @@ def create_app(config_name="default"):
             "status": "running",
             "endpoints": {
                 "health": "/api/health",
+
                 "auth": "/api/auth/",
                 "livestock": "/api/livestock/",
                 "orders": "/api/orders/",
                 "payments": "/api/payments/",
                 "notifications": "/api/notifications/"
+
             },
         }), 200
 

@@ -72,12 +72,12 @@ def get_inventory_stats():
     except ValueError:
         return jsonify({"error": "Invalid user ID format"}), 400
 
-    user = User.query.get(user_id_uuid)
+    user = User.query.filter_by(id=str(user_id_uuid)).first()
     if not user:
         return jsonify({"error": "User not found"}), 404
 
     # Only farmers can view their inventory stats
-    if user.role.value != "farmer":
+    if user.role != "farmer":
         return jsonify({"error": "Only farmers can view inventory stats"}), 403
 
     farmer = Farmer.query.filter_by(user_id=user_id_uuid).first()
@@ -119,12 +119,12 @@ def create_animal():
     except ValueError:
         return jsonify({"error": "Invalid user ID format"}), 400
 
-    user = User.query.get(user_id_uuid)
+    user = User.query.filter_by(id=str(user_id_uuid)).first()
     if not user:
         return jsonify({"error": "User not found"}), 404
 
     # Only farmers can create animals
-    if user.role.value != "farmer":
+    if user.role != "farmer":
         return jsonify({"error": "Only farmers can create livestock listings"}), 403
 
     farmer = Farmer.query.filter_by(user_id=user_id_uuid).first()
@@ -225,12 +225,12 @@ def seed_test_animal():
     except ValueError:
         return jsonify({"error": "Invalid user ID format"}), 400
 
-    user = User.query.get(user_id_uuid)
+    user = User.query.filter_by(id=str(user_id_uuid)).first()
     if not user:
         return jsonify({"error": "User not found"}), 404
 
     # Only farmers can create test animals
-    if user.role.value != "farmer":
+    if user.role != "farmer":
         return jsonify({"error": "Only farmers can create test animals"}), 403
 
     farmer = Farmer.query.filter_by(user_id=user_id_uuid).first()
@@ -522,7 +522,7 @@ def get_animal(animal_id):
         farmer_data = None
 
         if farmer:
-            user = User.query.get(farmer.user_id)
+            user = User.query.filter_by(id=str(farmer.user_id)).first()
             farmer_data = {
                 "id": farmer.id,
                 "name": user.full_name if user else "Unknown Farmer",
@@ -574,8 +574,8 @@ def update_animal(animal_id):
     except ValueError:
         return jsonify({"error": "Invalid user ID format"}), 400
 
-    user = User.query.get(user_id_uuid)
-    if not user or user.role.value != "farmer":
+    user = User.query.filter_by(id=str(user_id_uuid)).first()
+    if not user or user.role != "farmer":
         return jsonify({"error": "Only farmers can update animals"}), 403
 
     farmer = Farmer.query.filter_by(user_id=user_id_uuid).first()
@@ -622,8 +622,8 @@ def delete_animal(animal_id):
     except ValueError:
         return jsonify({"error": "Invalid user ID format"}), 400
 
-    user = User.query.get(user_id_uuid)
-    if not user or user.role.value != "farmer":
+    user = User.query.filter_by(id=str(user_id_uuid)).first()
+    if not user or user.role != "farmer":
         return jsonify({"error": "Only farmers can delete animals"}), 403
 
     farmer = Farmer.query.filter_by(user_id=user_id_uuid).first()

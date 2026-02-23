@@ -28,8 +28,8 @@ def admin_required(f):
         if not user_uuid:
             return jsonify({"error": "Invalid user ID format"}), 400
         
-        user = User.query.get(user_uuid)
-        if not user or user.role.value != "admin":
+        user = User.query.filter_by(id=str(user_uuid)).first()
+        if not user or user.role != "admin":
             return jsonify({"error": "Admin access required"}), 403
         
         return f(*args, **kwargs)
@@ -52,7 +52,7 @@ def create_dispute():
             return jsonify({"error": "Invalid user ID format"}), 400
         
         # Get user role
-        user = User.query.get(user_uuid)
+        user = User.query.filter_by(id=str(user_uuid)).first()
         if not user:
             return jsonify({"error": "User not found"}), 404
         
@@ -73,13 +73,13 @@ def create_dispute():
         if order_id and not target_id:
             order = Order.query.get(order_id)
             if order:
-                if user.role.value == "farmer":
+                if user.role == "farmer":
                     # Farmer filing dispute → target is buyer
                     buyer = Buyer.query.get(order.buyer_id)
                     if buyer:
                         target_id = buyer.user_id
                         current_app.logger.info(f"Auto-detected buyer target_id: {target_id} for farmer dispute on order {order_id}")
-                elif user.role.value == "buyer":
+                elif user.role == "buyer":
                     # Buyer filing dispute → target is farmer
                     farmer = Farmer.query.get(order.farmer_id)
                     if farmer:
@@ -163,7 +163,7 @@ def get_all_disputes_admin():
                     if order.buyer_id:
                         buyer = Buyer.query.get(order.buyer_id)
                         if buyer:
-                            buyer_user = User.query.get(buyer.user_id)
+                            buyer_user = User.query.filter_by(id=str(buyer.user_id)).first()
                             dispute_dict["buyer"] = {
                                 "name": buyer_user.full_name if buyer_user else "Unknown",
                                 "id": str(buyer_user.id) if buyer_user else None,
@@ -173,7 +173,7 @@ def get_all_disputes_admin():
                     if order.farmer_id:
                         farmer = Farmer.query.get(order.farmer_id)
                         if farmer:
-                            farmer_user = User.query.get(farmer.user_id)
+                            farmer_user = User.query.filter_by(id=str(farmer.user_id)).first()
                             dispute_dict["farmer"] = {
                                 "name": farmer_user.full_name if farmer_user else "Unknown",
                                 "id": str(farmer_user.id) if farmer_user else None,
@@ -362,7 +362,7 @@ def respond_to_dispute(dispute_id):
             return jsonify({"error": "You are not authorized to respond to this dispute"}), 403
         
         # Determine if current user is farmer or buyer
-        user = User.query.get(user_uuid)
+        user = User.query.filter_by(id=str(user_uuid)).first()
         is_farmer = Farmer.query.filter_by(user_id=user_uuid).first() is not None
         is_buyer = Buyer.query.filter_by(user_id=user_uuid).first() is not None
         

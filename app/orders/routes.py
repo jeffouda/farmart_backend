@@ -30,9 +30,9 @@ def get_uuid(val):
 def create_order():
     """Create order and trigger M-Pesa STK Push"""
     user_id = uuid.UUID(get_jwt_identity())
-    user = User.query.get(user_id)
+    user = User.query.filter_by(id=str(user_id)).first()
 
-    if not user or user.role.value != "buyer":
+    if not user or user.role != "buyer":
         return jsonify({"error": "Only buyers can create orders"}), 403
 
     buyer = Buyer.query.filter_by(user_id=user_id).first()
@@ -214,17 +214,17 @@ def get_order(order_id):
 def get_orders():
     """Get all orders for current user (buyer or farmer)"""
     user_id = uuid.UUID(get_jwt_identity())
-    user = User.query.get(user_id)
+    user = User.query.filter_by(id=str(user_id)).first()
     
     if not user:
         return jsonify({"error": "User not found"}), 404
     
-    if user.role.value == "buyer":
+    if user.role == "buyer":
         buyer = Buyer.query.filter_by(user_id=user_id).first()
         if not buyer:
             return jsonify({"error": "Buyer profile not found"}), 404
         orders = Order.query.filter_by(buyer_id=buyer.id).order_by(Order.created_at.desc()).all()
-    elif user.role.value == "farmer":
+    elif user.role == "farmer":
         farmer = Farmer.query.filter_by(user_id=user_id).first()
         if not farmer:
             return jsonify({"error": "Farmer profile not found"}), 404
@@ -253,12 +253,12 @@ def get_orders():
 def get_order_stats():
     """Get order statistics for dashboard"""
     user_id = uuid.UUID(get_jwt_identity())
-    user = User.query.get(user_id)
+    user = User.query.filter_by(id=str(user_id)).first()
     
     if not user:
         return jsonify({"error": "User not found"}), 404
     
-    if user.role.value == "buyer":
+    if user.role == "buyer":
         buyer = Buyer.query.filter_by(user_id=user_id).first()
         if not buyer:
             return jsonify({"error": "Buyer profile not found"}), 404
@@ -268,7 +268,7 @@ def get_order_stats():
         paid = sum(1 for o in orders if o.payment_status == "paid")
         delivered = sum(1 for o in orders if o.status == "delivered")
         total_spent = sum(float(o.total_amount) for o in orders if o.payment_status == "paid")
-    elif user.role.value == "farmer":
+    elif user.role == "farmer":
         farmer = Farmer.query.filter_by(user_id=user_id).first()
         if not farmer:
             return jsonify({"error": "Farmer profile not found"}), 404

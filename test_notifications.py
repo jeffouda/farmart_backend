@@ -42,4 +42,4 @@ with app.app_context():
     for user in users:
         unread = Notification.query.filter_by(user_id=user.id, is_read=False).count()
         if unread > 0:
-            print(f"{user.email} ({user.role.value}): {unread} unread")
+            print(f"{user.email} ({user.role}): {unread} unread")

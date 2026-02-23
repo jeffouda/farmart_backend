@@ -27,8 +27,8 @@ def get_farmer_analytics():
     except ValueError:
         return jsonify({"error": "Invalid user ID format"}), 400
 
-    user = User.query.get(current_user_id)
-    if not user or user.role.value != "farmer":
+    user = User.query.filter_by(id=str(current_user_id)).first()
+    if not user or user.role != "farmer":
         return jsonify({"error": "Only farmers can view analytics"}), 403
 
     farmer = Farmer.query.filter_by(user_id=current_user_id).first()
@@ -99,7 +99,7 @@ def get_farmer_analytics():
     recent_activity = []
     for order in recent_orders:
         buyer = Buyer.query.get(order.buyer_id)
-        buyer_user = User.query.get(buyer.user_id) if buyer else None
+        buyer_user = User.query.filter_by(id=str(buyer.user_id)).first() if buyer else None
         buyer_name = buyer_user.full_name if buyer_user else "Unknown Buyer"
         
         recent_activity.append({
