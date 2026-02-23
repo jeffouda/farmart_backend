@@ -141,9 +141,13 @@ def login():
 
     # Check password
     if user and user.check_password(password):
+        # Ensure role is always a lowercase string
+        user_role = user.role.value if hasattr(user.role, 'value') else str(user.role)
+        user_role = user_role.lower() if user_role else user_role
+        
         # Create JWT Token
         access_token = create_access_token(
-            identity=str(user.id), additional_claims={"role": user.role}
+            identity=str(user.id), additional_claims={"role": user_role}
         )
 
         return jsonify({
@@ -152,7 +156,7 @@ def login():
             "user": {
                 "id": str(user.id),
                 "email": user.email,
-                "role": user.role,
+                "role": user_role,
                 "full_name": user.full_name,
                 "phone_number": user.phone_number,
                 "location": user.location,
@@ -204,11 +208,15 @@ def get_current_user():
     if not user:
         return jsonify({"error": "User not found"}), 404
 
+    # Ensure role is always a lowercase string
+    user_role = user.role.value if hasattr(user.role, 'value') else str(user.role)
+    user_role = user_role.lower() if user_role else user_role
+
     # Build response with user data - role is now a string
     user_data = {
         "id": str(user.id),
         "email": user.email,
-        "role": user.role.value if hasattr(user.role, "value") else user.role,  # role is now a string
+        "role": user_role,
         "full_name": user.full_name,
         "phone_number": user.phone_number,
         "location": user.location,
@@ -218,13 +226,13 @@ def get_current_user():
     }
 
     # Add role-specific profile data
-    if user.role == "farmer" and user.farmer:
+    if user_role == "farmer" and user.farmer:
         user_data["farm_name"] = user.farmer.farm_name
         user_data["farm_location"] = user.farmer.location
         user_data["farm_phone_number"] = user.farmer.phone_number
         user_data["is_verified"] = user.farmer.is_verified
         user_data["wallet_balance"] = float(user.farmer.wallet_balance) if user.farmer.wallet_balance else 0
-    elif user.role == "buyer" and user.buyer:
+    elif user_role == "buyer" and user.buyer:
         user_data["delivery_address"] = user.buyer.delivery_address
         user_data["preferred_contact"] = user.buyer.preferred_contact
 

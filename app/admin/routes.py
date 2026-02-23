@@ -10,7 +10,12 @@ def admin_required():
     """Check if user is admin"""
     user_id = uuid.UUID(get_jwt_identity())
     user = User.query.filter_by(id=str(user_id)).first()
-    if not user or user.role != "admin":
+    
+    # Ensure role is compared as lowercase string
+    user_role = user.role.value if hasattr(user.role, 'value') else str(user.role)
+    user_role = user_role.lower() if user_role else user_role
+    
+    if not user or user_role != "admin":
         return None
     return user
 

@@ -138,8 +138,11 @@ def get_sessions():
         return jsonify({"error": "User not found"}), 404
 
     try:
-        # Get sessions based on role
-        if user.role == "buyer":
+        # Get sessions based on role - ensure role is compared as lowercase string
+        user_role = user.role.value if hasattr(user.role, 'value') else str(user.role)
+        user_role = user_role.lower() if user_role else user_role
+        
+        if user_role == "buyer":
             buyer = Buyer.query.filter_by(user_id=user_id_uuid).first()
             if buyer:
                 sessions = (
@@ -150,7 +153,7 @@ def get_sessions():
                 )
             else:
                 sessions = []
-        elif user.role == "farmer":
+        elif user_role == "farmer":
             farmer = Farmer.query.filter_by(user_id=user_id_uuid).first()
             if farmer:
                 sessions = (
@@ -214,10 +217,14 @@ def get_session(session_id):
     buyer = Buyer.query.filter_by(user_id=user_id_uuid).first()
     farmer = Farmer.query.filter_by(user_id=user_id_uuid).first()
 
+    # Ensure role is compared as lowercase string
+    user_role = user.role.value if hasattr(user.role, 'value') else str(user.role)
+    user_role = user_role.lower() if user_role else user_role
+    
     has_access = (
         (buyer and session.buyer_id == buyer.id)
         or (farmer and session.farmer_id == farmer.id)
-        or user.role == "admin"
+        or user_role == "admin"
     )
 
     if not has_access:
@@ -539,7 +546,10 @@ def respond_session(session_id):
         return jsonify({"error": "User not found"}), 404
 
     # Only farmers can respond
-    if user.role != "farmer":
+    user_role = user.role.value if hasattr(user.role, 'value') else str(user.role)
+    user_role = user_role.lower() if user_role else user_role
+    
+    if user_role != "farmer":
         return jsonify({"error": "Only farmers can respond to bargain sessions"}), 403
 
     session = BargainSession.query.get(session_id)

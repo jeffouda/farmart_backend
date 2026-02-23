@@ -29,7 +29,12 @@ def admin_required(f):
             return jsonify({"error": "Invalid user ID format"}), 400
         
         user = User.query.filter_by(id=str(user_uuid)).first()
-        if not user or user.role != "admin":
+        
+        # Ensure role is compared as lowercase string
+        user_role = user.role.value if hasattr(user.role, 'value') else str(user.role)
+        user_role = user_role.lower() if user_role else user_role
+        
+        if not user or user_role != "admin":
             return jsonify({"error": "Admin access required"}), 403
         
         return f(*args, **kwargs)
@@ -51,10 +56,14 @@ def create_dispute():
         if not user_uuid:
             return jsonify({"error": "Invalid user ID format"}), 400
         
-        # Get user role
+        # Get user
         user = User.query.filter_by(id=str(user_uuid)).first()
         if not user:
             return jsonify({"error": "User not found"}), 404
+        
+        # Get user role - ensure it's compared as lowercase string
+        user_role = user.role.value if hasattr(user.role, 'value') else str(user.role)
+        user_role = user_role.lower() if user_role else user_role
         
         data = request.form.to_dict()
         
@@ -73,13 +82,13 @@ def create_dispute():
         if order_id and not target_id:
             order = Order.query.get(order_id)
             if order:
-                if user.role == "farmer":
+                if user_role == "farmer":
                     # Farmer filing dispute → target is buyer
                     buyer = Buyer.query.get(order.buyer_id)
                     if buyer:
                         target_id = buyer.user_id
                         current_app.logger.info(f"Auto-detected buyer target_id: {target_id} for farmer dispute on order {order_id}")
-                elif user.role == "buyer":
+                elif user_role == "buyer":
                     # Buyer filing dispute → target is farmer
                     farmer = Farmer.query.get(order.farmer_id)
                     if farmer:

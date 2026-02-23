@@ -66,7 +66,7 @@ def create_app(config_name="default"):
     with app.app_context():
         try:
             # 1. Import models
-            from .models import User, Animal, Farmer, Buyer, Order, Review, PendingCheckout
+            from .models import User, Animal, Farmer, Buyer, Order, Review, PendingCheckout, UserRole
             
             # 2. Basic table creation
             print("Creating database tables...")
@@ -109,6 +109,26 @@ def create_app(config_name="default"):
 
                 connection.close()
 
+            # 4. Ensure admin user exists
+            admin = User.query.filter_by(email="admin@farmart.com").first()
+            if not admin:
+                admin = User(
+                    email="admin@farmart.com",
+                    role=UserRole.ADMIN,
+                    full_name="Admin User",
+                    is_active=True,
+                )
+                admin.set_password("admin123")
+                db.session.add(admin)
+                db.session.commit()
+                print("✅ Admin user created: admin@farmart.com / admin123")
+            else:
+                # Ensure admin has correct role
+                if admin.role != UserRole.ADMIN:
+                    admin.role = UserRole.ADMIN
+                    db.session.commit()
+                    print("✅ Admin user role updated to admin")
+                    
             print("✅ Database initialization sequence completed!")
         except Exception as e:
             print(f"❌ Database initialization error: {e}")
