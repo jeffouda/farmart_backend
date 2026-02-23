@@ -28,7 +28,12 @@ def get_farmer_analytics():
         return jsonify({"error": "Invalid user ID format"}), 400
 
     user = User.query.filter_by(id=str(current_user_id)).first()
-    if not user or user.role != "farmer":
+    
+    # Convert enum to string for comparison
+    user_role = user.role.value if hasattr(user.role, 'value') else str(user.role)
+    user_role_lower = user_role.lower() if user_role else user_role
+    
+    if not user or user_role_lower != "farmer":
         return jsonify({"error": "Only farmers can view analytics"}), 403
 
     farmer = Farmer.query.filter_by(user_id=current_user_id).first()

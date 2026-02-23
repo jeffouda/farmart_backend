@@ -32,8 +32,10 @@ def create_session():
     if not user:
         return jsonify({"error": "User not found"}), 404
 
-    # Validate buyer role - allow both string and enum comparison
-    user_role = str(user.role).lower()
+    # Validate buyer role - convert enum to proper string
+    user_role = user.role.value if hasattr(user.role, 'value') else str(user.role)
+    user_role = user_role.lower() if user_role else user_role
+    
     if user_role != "buyer":
         return jsonify({"error": "Only buyers can start bargain sessions", "debug_role": user_role}), 403
 
