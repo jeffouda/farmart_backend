@@ -76,8 +76,12 @@ def get_inventory_stats():
     if not user:
         return jsonify({"error": "User not found"}), 404
 
+    # Convert enum to string for comparison
+    user_role = user.role.value if hasattr(user.role, 'value') else str(user.role)
+    user_role_lower = user_role.lower() if user_role else user_role
+
     # Only farmers can view their inventory stats
-    if user.role != "farmer":
+    if user_role_lower != "farmer":
         return jsonify({"error": "Only farmers can view inventory stats"}), 403
 
     farmer = Farmer.query.filter_by(user_id=user_id_uuid).first()
@@ -123,8 +127,12 @@ def create_animal():
     if not user:
         return jsonify({"error": "User not found"}), 404
 
+    # Convert enum to string for comparison
+    user_role = user.role.value if hasattr(user.role, 'value') else str(user.role)
+    user_role_lower = user_role.lower() if user_role else user_role
+
     # Only farmers can create animals
-    if user.role != "farmer":
+    if user_role_lower != "farmer":
         return jsonify({"error": "Only farmers can create livestock listings"}), 403
 
     farmer = Farmer.query.filter_by(user_id=user_id_uuid).first()
@@ -229,8 +237,12 @@ def seed_test_animal():
     if not user:
         return jsonify({"error": "User not found"}), 404
 
+    # Convert enum to string for comparison
+    user_role = user.role.value if hasattr(user.role, 'value') else str(user.role)
+    user_role_lower = user_role.lower() if user_role else user_role
+
     # Only farmers can create test animals
-    if user.role != "farmer":
+    if user_role_lower != "farmer":
         return jsonify({"error": "Only farmers can create test animals"}), 403
 
     farmer = Farmer.query.filter_by(user_id=user_id_uuid).first()
@@ -575,7 +587,12 @@ def update_animal(animal_id):
         return jsonify({"error": "Invalid user ID format"}), 400
 
     user = User.query.filter_by(id=str(user_id_uuid)).first()
-    if not user or user.role != "farmer":
+    
+    # Convert enum to string for comparison
+    user_role = user.role.value if hasattr(user.role, 'value') else str(user.role)
+    user_role_lower = user_role.lower() if user_role else user_role
+    
+    if not user or user_role_lower != "farmer":
         return jsonify({"error": "Only farmers can update animals"}), 403
 
     farmer = Farmer.query.filter_by(user_id=user_id_uuid).first()
@@ -623,7 +640,12 @@ def delete_animal(animal_id):
         return jsonify({"error": "Invalid user ID format"}), 400
 
     user = User.query.filter_by(id=str(user_id_uuid)).first()
-    if not user or user.role != "farmer":
+    
+    # Convert enum to string for comparison
+    user_role = user.role.value if hasattr(user.role, 'value') else str(user.role)
+    user_role_lower = user_role.lower() if user_role else user_role
+    
+    if not user or user_role_lower != "farmer":
         return jsonify({"error": "Only farmers can delete animals"}), 403
 
     farmer = Farmer.query.filter_by(user_id=user_id_uuid).first()
