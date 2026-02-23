@@ -22,16 +22,22 @@ with app.app_context():
 
 # 2. Configure CORS
 # Pull from config or fallback to your frontend URL
-allowed_origins = app.config.get('ALLOWED_ORIGINS', "https://farmart-com.onrender.com")
+allowed_origins = [
+    "https://farmart-com.onrender.com",
+    "https://farmart-backend-q9w6.onrender.com",
+    "http://localhost:5173",
+    "http://localhost:3000",
+    "https://aglisten-armida-confarreate.ngrok-free.dev",
+]
 
 CORS(
     app,
     supports_credentials=True,
     resources={
         r"/api/*": {
-            "origins": [allowed_origins, "http://localhost:5173"],
+            "origins": allowed_origins,
             "methods": ["GET", "POST", "PUT", "DELETE", "OPTIONS", "PATCH"],
-            "allow_headers": ["Content-Type", "Authorization", "Accept", "Origin", "ngrok-skip-browser-warning"],
+            "allow_headers": ["Content-Type", "Authorization", "Accept", "Origin", "ngrok-skip-browser-warning", "X-Requested-With"],
             "expose_headers": ["Content-Type", "Authorization"],
             "max_age": 86400
         }

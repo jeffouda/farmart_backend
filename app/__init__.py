@@ -85,7 +85,10 @@ def create_app(config_name="default"):
                 "origins": [
                     "http://localhost:5173",
                     "http://127.0.0.1:5173",
+                    "http://localhost:3000",
                     "https://farmart-com.onrender.com",
+                    "https://farmart-backend-q9w6.onrender.com",
+                    "https://aglisten-armida-confarreate.ngrok-free.dev",
                 ],
                 "methods": ["GET", "POST", "PUT", "DELETE", "OPTIONS", "PATCH"],
                 "allow_headers": [
@@ -94,6 +97,7 @@ def create_app(config_name="default"):
                     "ngrok-skip-browser-warning",
                     "Accept",
                     "Origin",
+                    "X-Requested-With",
                 ],
                 "expose_headers": ["Content-Type", "Authorization"],
                 "max_age": 86400,
