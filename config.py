@@ -62,7 +62,7 @@ class Config:
     # CORS Allowed Origins
     ALLOWED_ORIGINS = os.environ.get(
         "ALLOWED_ORIGINS",
-        "http://localhost:3000,http://localhost:5173,https://farmart-com.onrender.com"
+        "http://localhost:3000,http://localhost:5173,https://farmart-com.onrender.com,https://farmart-backend-q9w6.onrender.com"
     ).split(",")
 
 

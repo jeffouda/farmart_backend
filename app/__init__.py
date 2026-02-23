@@ -13,7 +13,7 @@ jwt = JWTManager()
 def create_app(config_name="default"):
     app = Flask(__name__)
 
-    # Disable strict slashes to prevent 404/redirect issues with CORS
+    # Disable strict slashes to prevent redirect issues with CORS
     app.url_map.strict_slashes = False
 
     # Load configuration from config.py
@@ -25,48 +25,11 @@ def create_app(config_name="default"):
     migrate.init_app(app, db)
     jwt.init_app(app)
 
-
-    # JWT Error Handlers - Return proper JSON responses instead of 401 text
-    @jwt.invalid_token_loader
-    def invalid_token_callback(error_string):
-        return jsonify({
-            "error": "Invalid token",
-            "message": error_string,
-            "code": "INVALID_TOKEN"
-        }), 401
-
-    @jwt.expired_token_loader
-    def expired_token_callback(jwt_header, jwt_payload):
-        return jsonify({
-            "error": "Token has expired",
-            "message": "Please login again",
-            "code": "TOKEN_EXPIRED"
-        }), 401
-
-    @jwt.unauthorized_loader
-    def unauthorized_callback(error_string):
-        return jsonify({
-            "error": "Authorization required",
-            "message": error_string or "Missing authorization token",
-            "code": "UNAUTHORIZED"
-        }), 401
-
-    # Updated Origins to include your specific Ngrok tunnel
-    origins = [
-        "http://localhost:5173",
-        "http://127.0.0.1:5173",
-        "http://localhost:3000",
-        "https://farmart-com.onrender.com",
-        "https://aglisten-armida-confarreate.ngrok-free.dev" # Added for M-Pesa testing
-    ]
-
-    # Configure CORS
-
     # --- DATABASE INITIALIZATION & MIGRATIONS ---
     with app.app_context():
         try:
             # 1. Import models
-            from .models import User, Animal, Farmer, Buyer, Order, Review, PendingCheckout, UserRole
+            from .models import User, Animal, Farmer, Buyer, Order, Review, PendingCheckout
             
             # 2. Basic table creation
             print("Creating database tables...")
@@ -80,8 +43,8 @@ def create_app(config_name="default"):
                 connection.execute(text("COMMIT"))
                 
                 # --- Fix Enum Case/Value Issues ---
-                # This adds 'FARMER', 'BUYER', 'ADMIN' to the DB type (uppercase to match PostgreSQL)
-                for role in ['FARMER', 'BUYER', 'ADMIN']:
+                # This adds 'farmer' and 'buyer' to the DB type if they don't exist
+                for role in ['farmer', 'buyer', 'admin']:
                     try:
                         connection.execute(text(f"ALTER TYPE userrole ADD VALUE '{role}';"))
                         connection.execute(text("COMMIT"))
@@ -109,39 +72,24 @@ def create_app(config_name="default"):
 
                 connection.close()
 
-            # 4. Ensure admin user exists
-            admin = User.query.filter_by(email="admin@farmart.com").first()
-            if not admin:
-                admin = User(
-                    email="admin@farmart.com",
-                    role=UserRole.ADMIN,  # Use uppercase enum
-                    full_name="Admin User",
-                    is_active=True,
-                )
-                admin.set_password("admin123")
-                db.session.add(admin)
-                db.session.commit()
-                print("✅ Admin user created: admin@farmart.com / admin123")
-            else:
-                # Ensure admin has correct role (handle both uppercase and lowercase)
-                current_role = admin.role.value if hasattr(admin.role, 'value') else str(admin.role)
-                if current_role.upper() != "ADMIN":
-                    admin.role = UserRole.ADMIN
-                    db.session.commit()
-                    print("✅ Admin user role updated to admin")
-                    
             print("✅ Database initialization sequence completed!")
         except Exception as e:
             print(f"❌ Database initialization error: {e}")
 
     # --- UNIFIED CORS CONFIGURATION ---
-
     CORS(
         app,
         supports_credentials=True,
         resources={
             r"/api/*": {
-                "origins": origins,
+                "origins": [
+                    "http://localhost:5173",
+                    "http://127.0.0.1:5173",
+                    "http://localhost:3000",
+                    "https://farmart-com.onrender.com",
+                    "https://farmart-backend-q9w6.onrender.com",
+                    "https://aglisten-armida-confarreate.ngrok-free.dev",
+                ],
                 "methods": ["GET", "POST", "PUT", "DELETE", "OPTIONS", "PATCH"],
                 "allow_headers": [
                     "Content-Type",
@@ -149,7 +97,7 @@ def create_app(config_name="default"):
                     "ngrok-skip-browser-warning",
                     "Accept",
                     "Origin",
-                    "X-Requested-With"
+                    "X-Requested-With",
                 ],
                 "expose_headers": ["Content-Type", "Authorization"],
                 "max_age": 86400,
@@ -168,7 +116,7 @@ def create_app(config_name="default"):
     from app.analytics import analytics_bp
     from app.negotiation import negotiation_bp
     from app.payments import payment_bp
-    from app.notifications.routes import notifications_bp # Pointing to correct routes file
+    from app.notifications import notifications_bp
     from app.admin import admin_bp
 
     app.register_blueprint(auth_bp, url_prefix="/api/auth")
@@ -186,13 +134,10 @@ def create_app(config_name="default"):
 
     # Serve uploads logic...
     uploads_dir = os.path.join(os.getcwd(), "uploads")
-
-    if not os.path.exists(uploads_dir):
-        os.makedirs(uploads_dir)
-
-    @app.route("/uploads/<path:filename>")
-    def serve_upload(filename):
-        return send_from_directory(uploads_dir, filename)
+    if os.path.exists(uploads_dir):
+        @app.route("/uploads/<path:filename>")
+        def serve_upload(filename):
+            return send_from_directory(uploads_dir, filename)
 
     static_uploads_dir = os.path.join(os.path.dirname(__file__), "static", "uploads")
     if os.path.exists(static_uploads_dir):
@@ -212,13 +157,7 @@ def create_app(config_name="default"):
             "status": "running",
             "endpoints": {
                 "health": "/api/health",
-
-                "auth": "/api/auth/",
-                "livestock": "/api/livestock/",
-                "orders": "/api/orders/",
-                "payments": "/api/payments/",
-                "notifications": "/api/notifications/"
-
+                "auth": "/api/auth/login, /api/auth/register, /api/auth/me",
             },
         }), 200
 
