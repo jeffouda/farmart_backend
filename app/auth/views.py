@@ -131,20 +131,42 @@ def register():
 # LOGIN ROUTE
 @auth_bp.route("/login", methods=["POST"])
 def login():
+    import logging
+    
+    logger = logging.getLogger(__name__)
+    
     data = request.get_json()
-
     email = data.get("email")
     password = data.get("password")
+    
+    logger.info(f"🔐 Login attempt for email: {email}")
 
     # Find user
     user = User.query.filter_by(email=email).first()
-
+    
+    if not user:
+        logger.warning(f"❌ User not found: {email}")
+        return jsonify({"error": "Invalid credentials"}), 401
+    
+    logger.info(f"✅ User found: {user.email}, role: {user.role}")
+    
     # Check password
-    if user and user.check_password(password):
+    password_valid = user.check_password(password)
+    logger.info(f"🔑 Password check result: {password_valid}")
+    
+    if user and password_valid:
+        # Get role as lowercase string
+        user_role = user.role.value if hasattr(user.role, 'value') else str(user.role)
+        user_role_lower = user_role.lower() if user_role else user_role
+        
+        logger.info(f"🎫 Creating JWT with role: {user_role_lower}")
+        
         # Create JWT Token
         access_token = create_access_token(
-            identity=str(user.id), additional_claims={"role": user.role}
+            identity=str(user.id), additional_claims={"role": user_role_lower}
         )
+        
+        logger.info(f"✅ Login successful for: {email}")
 
         return jsonify({
             "message": "Login successful",
@@ -152,13 +174,14 @@ def login():
             "user": {
                 "id": str(user.id),
                 "email": user.email,
-                "role": user.role,
+                "role": user_role_lower,
                 "full_name": user.full_name,
                 "phone_number": user.phone_number,
                 "location": user.location,
             },
         }), 200
 
+    logger.warning(f"❌ Invalid credentials for: {email}")
     return jsonify({"error": "Invalid credentials"}), 401
 
 

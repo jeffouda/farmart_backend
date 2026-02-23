@@ -1,4 +1,5 @@
 import os
+import logging
 from flask import Flask, jsonify, send_from_directory, request
 from flask_cors import CORS
 from .models import db
@@ -7,11 +8,18 @@ from flask_jwt_extended import JWTManager
 from config import config
 from sqlalchemy import text
 
+# Configure logging
+logging.basicConfig(level=logging.INFO)
+logger = logging.getLogger(__name__)
+
 migrate = Migrate()
 jwt = JWTManager()
 
 def create_app(config_name="default"):
     app = Flask(__name__)
+    
+    # Enable debug logging in production
+    app.logger.setLevel(logging.INFO)
 
     # Disable strict slashes to prevent redirect issues with CORS
     app.url_map.strict_slashes = False
@@ -164,20 +172,29 @@ def create_app(config_name="default"):
     @app.route("/api/auth/setup-admin", methods=["POST"])
     def setup_admin():
         """One-time admin user creation endpoint"""
+        logger.info("🔧 Setup admin endpoint called")
+        
         data = request.get_json()
         secret = data.get("secret")
         
+        logger.info(f"🔧 Secret provided: {secret[:10] if secret else 'None'}...")
+        
         # Simple secret to prevent unauthorized admin creation
         if secret != "farmart-admin-setup-2024":
+            logger.warning("⚠️ Invalid secret provided")
             return jsonify({"error": "Invalid secret"}), 403
         
         try:
             from app.models import User, UserRole
             
+            logger.info("🔧 Checking for existing admin...")
             admin = User.query.filter_by(email="admin@farmart.com").first()
+            
             if admin:
+                logger.info(f"✅ Admin already exists: {admin.email}, role: {admin.role}")
                 return jsonify({"message": "Admin already exists", "email": admin.email}), 200
             
+            logger.info("🔧 Creating new admin user...")
             admin = User(
                 email="admin@farmart.com",
                 role=UserRole.ADMIN,
@@ -188,6 +205,8 @@ def create_app(config_name="default"):
             db.session.add(admin)
             db.session.commit()
             
+            logger.info("✅ Admin created successfully!")
+            
             return jsonify({
                 "message": "Admin created successfully",
                 "email": "admin@farmart.com",
@@ -195,6 +214,7 @@ def create_app(config_name="default"):
             }), 201
         except Exception as e:
             db.session.rollback()
+            logger.error(f"❌ Error creating admin: {str(e)}")
             return jsonify({"error": str(e)}), 500
 
     return app
