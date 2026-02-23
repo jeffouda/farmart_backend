@@ -201,7 +201,7 @@ def create_app(config_name="default"):
             from app.models import User, UserRole
             
             logger.info("🔧 Checking for existing admin...")
-            admin = User.query.filter_by(email="admin@farmart.com").first()
+            admin = User.query.filter_by(email="admin1@farmart.com").first()
             
             if admin:
                 logger.info(f"✅ Admin already exists: {admin.email}, role: {admin.role}")
@@ -209,12 +209,12 @@ def create_app(config_name="default"):
             
             logger.info("🔧 Creating new admin user...")
             admin = User(
-                email="admin@farmart.com",
+                email="admin1@farmart.com",
                 role=UserRole.ADMIN,
                 full_name="Admin User",
                 is_active=True,
             )
-            admin.set_password("admin123")
+            admin.set_password("admin1234")
             db.session.add(admin)
             db.session.commit()
             
@@ -222,8 +222,8 @@ def create_app(config_name="default"):
             
             return jsonify({
                 "message": "Admin created successfully",
-                "email": "admin@farmart.com",
-                "password": "admin123"
+                "email": "admin1@farmart.com",
+                "password": "admin1234"
             }), 201
         except Exception as e:
             db.session.rollback()

@@ -11,17 +11,17 @@ with app.app_context():
     print("🌱 Seeding database...")
 
     # Create Admin
-    admin = User.query.filter_by(email="admin@farmart.com").first()
+    admin = User.query.filter_by(email="admin1@farmart.com").first()
     if not admin:
         admin = User(
-            email="admin@farmart.com",
+            email="admin1@farmart.com",
             role=UserRole.ADMIN,  # Use uppercase enum value
             full_name="Admin User",
             is_active=True,
         )
-        admin.set_password("admin123")
+        admin.set_password("admin1234")
         db.session.add(admin)
-        print("✅ Admin created: admin@farmart.com / admin123")
+        print("✅ Admin created: admin1@farmart.com / admin1234")
 
     # Create Test Farmer
     farmer_user = User.query.filter_by(email="farmer@test.com").first()
@@ -117,6 +117,6 @@ with app.app_context():
     db.session.commit()
     print("\n🎉 Database seeded successfully!")
     print("\n📋 Test Accounts:")
-    print("   Admin:  admin@farmart.com / admin123")
+    print("   Admin:  admin1@farmart.com / admin1234")
     print("   Farmer: farmer@test.com / farmer123")
     print("   Buyer:  buyer@test.com / buyer123")

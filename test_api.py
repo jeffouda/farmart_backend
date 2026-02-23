@@ -58,8 +58,8 @@ def test_admin(token):
     print("🔍 Testing admin endpoint...")
     # Login as admin
     r = requests.post(f"{BASE_URL}/auth/login", json={
-        "email": "admin@farmart.com",
-        "password": "admin123"
+        "email": "admin1@farmart.com",
+        "password": "admin1234"
     })
     admin_token = r.json()["access_token"]
     headers = {"Authorization": f"Bearer {admin_token}"}
@@ -86,7 +86,7 @@ if __name__ == "__main__":
         print("\n" + "=" * 50)
         print("🎉 All tests passed! Production ready!")
         print("\n📋 Test Accounts:")
-        print("   Admin:  admin@farmart.com / admin123")
+        print("   Admin:  admin1@farmart.com / admin1234")
         print("   Farmer: farmer@test.com / farmer123")
         print("   Buyer:  buyer@test.com / buyer123")
         
