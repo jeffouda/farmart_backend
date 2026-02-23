@@ -2,16 +2,16 @@ import uuid
 from datetime import datetime
 from enum import Enum
 from flask_sqlalchemy import SQLAlchemy
+# UUID type for compatibility
 from werkzeug.security import generate_password_hash, check_password_hash
-from sqlalchemy.dialects.postgresql import UUID
 
 db = SQLAlchemy()
 
 # Role Definitions using Enum for Type Safety
 class UserRole(str, Enum):
-    ADMIN = "admin"
-    FARMER = "farmer"
-    BUYER = "buyer"
+    ADMIN = "ADMIN"
+    FARMER = "FARMER"
+    BUYER = "BUYER"
 
 # Base Mixin for Audit Trails
 class TimestampMixin:
@@ -23,11 +23,10 @@ class TimestampMixin:
 class User(db.Model, TimestampMixin):
     __tablename__ = "users"
 
-    # Native PostgreSQL UUID
-    id = db.Column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
+    id = db.Column(db.String(36), primary_key=True, default=lambda: str(uuid.uuid4()))
     email = db.Column(db.String(120), unique=True, nullable=False, index=True)
     password_hash = db.Column(db.String(256), nullable=False)
-    role = db.Column(db.String(20), nullable=False, default="buyer")
+    role = db.Column(db.Enum(UserRole), nullable=False, default=UserRole.BUYER)
     is_active = db.Column(db.Boolean, default=True)
 
     # Profile fields
@@ -35,7 +34,7 @@ class User(db.Model, TimestampMixin):
     phone_number = db.Column(db.String(20), nullable=True)
     location = db.Column(db.String(255), nullable=True)
 
-    # Reputation fields
+    # Reputation fields (for farmers)
     average_rating = db.Column(db.Float, default=0.0)
     review_count = db.Column(db.Integer, default=0)
 
@@ -60,8 +59,8 @@ class User(db.Model, TimestampMixin):
 class Farmer(db.Model, TimestampMixin):
     __tablename__ = "farmers"
 
-    id = db.Column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
-    user_id = db.Column(UUID(as_uuid=True), db.ForeignKey("users.id"), nullable=False)
+    id = db.Column(db.String(36), primary_key=True, default=lambda: str(uuid.uuid4()))
+    user_id = db.Column(db.String(36), db.ForeignKey("users.id"), nullable=False)
 
     farm_name = db.Column(db.String(100), nullable=False)
     location = db.Column(db.String(255), nullable=False)
@@ -78,8 +77,8 @@ class Farmer(db.Model, TimestampMixin):
 class Buyer(db.Model, TimestampMixin):
     __tablename__ = "buyers"
 
-    id = db.Column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
-    user_id = db.Column(UUID(as_uuid=True), db.ForeignKey("users.id"), nullable=False)
+    id = db.Column(db.String(36), primary_key=True, default=lambda: str(uuid.uuid4()))
+    user_id = db.Column(db.String(36), db.ForeignKey("users.id"), nullable=False)
 
     delivery_address = db.Column(db.Text, nullable=True)
     preferred_contact = db.Column(db.String(50))
@@ -91,8 +90,8 @@ class Buyer(db.Model, TimestampMixin):
 class Animal(db.Model, TimestampMixin):
     __tablename__ = "animals"
 
-    id = db.Column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
-    farmer_id = db.Column(UUID(as_uuid=True), db.ForeignKey("farmers.id"), nullable=False)
+    id = db.Column(db.String(36), primary_key=True, default=lambda: str(uuid.uuid4()))
+    farmer_id = db.Column(db.String(36), db.ForeignKey("farmers.id"), nullable=False)
 
     species = db.Column(db.String(50), nullable=False)
     breed = db.Column(db.String(100))
@@ -125,21 +124,22 @@ class Animal(db.Model, TimestampMixin):
 class Order(db.Model, TimestampMixin):
     __tablename__ = "orders"
 
-    id = db.Column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
-    buyer_id = db.Column(UUID(as_uuid=True), db.ForeignKey("buyers.id"), nullable=False)
-    farmer_id = db.Column(UUID(as_uuid=True), db.ForeignKey("farmers.id"), nullable=False)
+    id = db.Column(db.String(36), primary_key=True, default=lambda: str(uuid.uuid4()))
+    buyer_id = db.Column(db.String(36), db.ForeignKey("buyers.id"), nullable=False)
+    farmer_id = db.Column(db.String(36), db.ForeignKey("farmers.id"), nullable=False)
     bargain_id = db.Column(db.Integer, db.ForeignKey("bargain_sessions.id"), nullable=True)
 
     items = db.Column(db.JSON, nullable=False)
     total_amount = db.Column(db.Numeric(10, 2), nullable=False)
-    status = db.Column(db.String(20), default="pending") 
+    status = db.Column(db.String(20), default="pending")  # pending, held, completed, cancelled
     payment_status = db.Column(db.String(20), default="pending")
     payment_method = db.Column(db.String(50), default="mpesa")
-    checkout_id = db.Column(db.String(100), nullable=True) 
+    checkout_id = db.Column(db.String(100), nullable=True) # Linked to M-Pesa STK Push
     has_review = db.Column(db.Boolean, default=False)
 
-    buyer_rel = db.relationship("Buyer", backref="orders")
-    farmer_rel = db.relationship("Farmer", backref="orders")
+    buyer = db.relationship("Buyer", backref="orders")
+    farmer = db.relationship("Farmer", backref="orders")
+    # Link to the detailed escrow tracking
     escrow = db.relationship("EscrowRecord", backref="order", uselist=False, cascade="all, delete-orphan")
 
     def to_dict(self):
@@ -157,14 +157,20 @@ class Order(db.Model, TimestampMixin):
 class EscrowRecord(db.Model, TimestampMixin):
     __tablename__ = "escrow_records"
 
-    id = db.Column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
-    order_id = db.Column(UUID(as_uuid=True), db.ForeignKey("orders.id"), nullable=False)
+    id = db.Column(db.String(36), primary_key=True, default=lambda: str(uuid.uuid4()))
+    order_id = db.Column(db.String(36), db.ForeignKey("orders.id"), nullable=False)
     
+    # Using Numeric(10, 2) is best practice for currency to avoid floating-point errors
     amount = db.Column(db.Numeric(10, 2), nullable=False)
-    seller_phone = db.Column(db.String(20), nullable=False)
+    seller_phone = db.Column(db.String(20), nullable=False) # Essential for B2C payout
+    
+    # Statuses: pending (initial), held (paid by buyer), released (paid to farmer), 
+    # disputed (hold on funds), refunded (returned to buyer)
     status = db.Column(db.String(20), default="pending") 
-    mpesa_receipt = db.Column(db.String(100), unique=True, nullable=True)
-    b2c_conversation_id = db.Column(db.String(100), unique=True, nullable=True)
+    
+    # M-Pesa Tracking
+    mpesa_receipt = db.Column(db.String(100), unique=True, nullable=True) # Unique receipt from STK callback
+    b2c_conversation_id = db.Column(db.String(100), unique=True, nullable=True) # Links to the farmer payout result
 
     def __repr__(self):
         return f"<Escrow Order: {self.order_id} | Status: {self.status}>"
@@ -172,16 +178,16 @@ class EscrowRecord(db.Model, TimestampMixin):
 class Review(db.Model, TimestampMixin):
     __tablename__ = "reviews"
 
-    id = db.Column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
-    order_id = db.Column(UUID(as_uuid=True), db.ForeignKey("orders.id"), nullable=False)
-    reviewer_id = db.Column(UUID(as_uuid=True), db.ForeignKey("users.id"), nullable=False)
-    target_id = db.Column(UUID(as_uuid=True), db.ForeignKey("users.id"), nullable=False)
+    id = db.Column(db.String(36), primary_key=True, default=lambda: str(uuid.uuid4()))
+    order_id = db.Column(db.String(36), db.ForeignKey("orders.id"), nullable=False)
+    reviewer_id = db.Column(db.String(36), db.ForeignKey("users.id"), nullable=False)
+    target_id = db.Column(db.String(36), db.ForeignKey("users.id"), nullable=False)
 
     rating = db.Column(db.Integer, nullable=False)
     comment = db.Column(db.Text, nullable=True)
     tags = db.Column(db.JSON, nullable=True)
 
-    order_rel = db.relationship("Order", backref="review")
+    order = db.relationship("Order", backref="review")
     reviewer = db.relationship("User", foreign_keys=[reviewer_id], backref="reviews_given")
     target = db.relationship("User", foreign_keys=[target_id], backref="reviews_received")
 
@@ -190,8 +196,8 @@ class Wishlist(db.Model, TimestampMixin):
     __tablename__ = "wishlists"
 
     id = db.Column(db.Integer, primary_key=True, autoincrement=True)
-    user_id = db.Column(UUID(as_uuid=True), db.ForeignKey("users.id"), nullable=False)
-    animal_id = db.Column(UUID(as_uuid=True), db.ForeignKey("animals.id"), nullable=False)
+    user_id = db.Column(db.String(36), db.ForeignKey("users.id"), nullable=False)
+    animal_id = db.Column(db.String(36), db.ForeignKey("animals.id"), nullable=False)
 
     animal = db.relationship("Animal", backref="wishlisted_by", lazy=True)
 
@@ -209,9 +215,9 @@ class BargainSession(db.Model, TimestampMixin):
     __tablename__ = "bargain_sessions"
 
     id = db.Column(db.Integer, primary_key=True, autoincrement=True)
-    animal_id = db.Column(UUID(as_uuid=True), db.ForeignKey("animals.id"), nullable=False)
-    buyer_id = db.Column(UUID(as_uuid=True), db.ForeignKey("buyers.id"), nullable=False)
-    farmer_id = db.Column(UUID(as_uuid=True), db.ForeignKey("farmers.id"), nullable=False)
+    animal_id = db.Column(db.String(36), db.ForeignKey("animals.id"), nullable=False)
+    buyer_id = db.Column(db.String(36), db.ForeignKey("buyers.id"), nullable=False)
+    farmer_id = db.Column(db.String(36), db.ForeignKey("farmers.id"), nullable=False)
 
     initial_offer = db.Column(db.Numeric(10, 2), nullable=False)
     final_price = db.Column(db.Numeric(10, 2), nullable=True)
@@ -231,28 +237,9 @@ class BargainSession(db.Model, TimestampMixin):
             "id": str(self.id),
             "animal_id": str(self.animal_id),
             "buyer_id": str(self.buyer_id),
-            "farmer_id": str(self.farmer_id),
             "status": self.status,
-            "initial_offer": float(self.initial_offer) if self.initial_offer else None,
-            "final_price": float(self.final_price) if self.final_price else None,
             "order_id": str(linked_order.id) if linked_order else None,
             "created_at": self.created_at.isoformat() if self.created_at else None,
-            "animal": {
-                "id": str(self.animal.id),
-                "species": self.animal.species,
-                "breed": self.animal.breed,
-                "image_url": self.animal.image_url,
-                "farmer_name": self.farmer.farm_name if self.farmer else None,
-            } if self.animal else None,
-            "farmer": {
-                "id": str(self.farmer.id),
-                "farm_name": self.farmer.farm_name,
-                "full_name": self.farmer.user.full_name if self.farmer and hasattr(self.farmer, 'user') else None,
-            } if self.farmer else None,
-            "buyer": {
-                "id": str(self.buyer.id),
-                "full_name": self.buyer.user.full_name if self.buyer and hasattr(self.buyer, 'user') else None,
-            } if self.buyer else None,
         }
 
 
@@ -261,7 +248,7 @@ class BargainMessage(db.Model):
 
     id = db.Column(db.Integer, primary_key=True, autoincrement=True)
     session_id = db.Column(db.Integer, db.ForeignKey("bargain_sessions.id"), nullable=False)
-    sender_id = db.Column(UUID(as_uuid=True), db.ForeignKey("users.id"), nullable=False)
+    sender_id = db.Column(db.String(36), db.ForeignKey("users.id"), nullable=False)
     sender_role = db.Column(db.String(20), nullable=False)
     message = db.Column(db.Text, nullable=False)
     offered_price = db.Column(db.Numeric(10, 2), nullable=True)
@@ -279,29 +266,39 @@ class BargainMessage(db.Model):
 class Dispute(db.Model, TimestampMixin):
     __tablename__ = "disputes"
     
-    id = db.Column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
+    id = db.Column(db.String(36), primary_key=True, default=lambda: str(uuid.uuid4()))
     ticket_id = db.Column(db.String(20), unique=True, nullable=False)
-    order_id = db.Column(UUID(as_uuid=True), db.ForeignKey("orders.id"), nullable=True)
-    filer_id = db.Column(UUID(as_uuid=True), db.ForeignKey("users.id"), nullable=False)
-    target_id = db.Column(UUID(as_uuid=True), db.ForeignKey("users.id"), nullable=True)
     
-    dispute_type = db.Column(db.String(20), default="order") 
+    # Link to order (if dispute is about an order)
+    order_id = db.Column(db.String(36), db.ForeignKey("orders.id"), nullable=True)
+    
+    # Dispute parties
+    filer_id = db.Column(db.String(36), db.ForeignKey("users.id"), nullable=False)
+    target_id = db.Column(db.String(36), db.ForeignKey("users.id"), nullable=True)
+    
+    # Dispute details
+    dispute_type = db.Column(db.String(20), default="order")  # 'order', 'user', 'livestock'
     reason = db.Column(db.String(50), nullable=False)
     description = db.Column(db.Text, nullable=False)
-    resolution = db.Column(db.String(20)) 
-    status = db.Column(db.String(20), default="open") 
-    admin_notes = db.Column(db.Text, nullable=True)
-    admin_decision = db.Column(db.String(20), nullable=True) 
+    resolution = db.Column(db.String(20))  # 'refund', 'replacement', 'report'
     
+    # Status
+    status = db.Column(db.String(20), default="open")  # 'open', 'pending', 'resolved', 'dismissed'
+    admin_notes = db.Column(db.Text, nullable=True)
+    admin_decision = db.Column(db.String(20), nullable=True)  # 'refund_buyer', 'release_farmer', 'dismiss'
+    
+    # Farmer response fields
     farmer_response = db.Column(db.Text, nullable=True)
     farmer_response_at = db.Column(db.DateTime, nullable=True)
-    farmer_evidence = db.Column(db.String(255), nullable=True)
+    farmer_evidence = db.Column(db.String(255), nullable=True)  # Path to uploaded evidence
     
+    # Buyer response fields (when farmer files dispute)
     buyer_response = db.Column(db.Text, nullable=True)
     buyer_response_at = db.Column(db.DateTime, nullable=True)
     buyer_evidence = db.Column(db.String(255), nullable=True)
     
-    order_rel = db.relationship("Order", backref="dispute")
+    # Relationships
+    order = db.relationship("Order", backref="dispute")
     filer = db.relationship("User", foreign_keys=[filer_id], backref="disputes_filed")
     target = db.relationship("User", foreign_keys=[target_id], backref="disputes_against")
     
@@ -331,12 +328,16 @@ class Dispute(db.Model, TimestampMixin):
 
 
 class Message(db.Model):
+    """
+    Model for direct messages between users about livestock.
+    Used by the negotiation API for messaging.
+    """
     __tablename__ = "messages"
 
     id = db.Column(db.Integer, primary_key=True, autoincrement=True)
-    sender_id = db.Column(UUID(as_uuid=True), db.ForeignKey("users.id"), nullable=False)
-    receiver_id = db.Column(UUID(as_uuid=True), db.ForeignKey("users.id"), nullable=False)
-    livestock_id = db.Column(UUID(as_uuid=True), db.ForeignKey("animals.id"), nullable=False)
+    sender_id = db.Column(db.String(36), db.ForeignKey("users.id"), nullable=False)
+    receiver_id = db.Column(db.String(36), db.ForeignKey("users.id"), nullable=False)
+    livestock_id = db.Column(db.String(36), db.ForeignKey("animals.id"), nullable=False)
     content = db.Column(db.Text, nullable=False)
     is_read = db.Column(db.Boolean, default=False)
     created_at = db.Column(db.DateTime, default=datetime.utcnow)
@@ -358,23 +359,31 @@ class Message(db.Model):
 
 
 class Notification(db.Model):
+    """
+    Model for user notifications (orders, negotiations, disputes)
+    """
     __tablename__ = "notifications"
 
     id = db.Column(db.Integer, primary_key=True, autoincrement=True)
-    user_id = db.Column(UUID(as_uuid=True), db.ForeignKey("users.id"), nullable=False)
+    user_id = db.Column(db.String(36), db.ForeignKey("users.id"), nullable=False)
     
-    type = db.Column(db.String(30), nullable=False) 
+    # Notification types
+    type = db.Column(db.String(30), nullable=False)  # 'new_order', 'new_negotiation', 'new_dispute', 'order_update', 'negotiation_update'
     title = db.Column(db.String(100), nullable=False)
     message = db.Column(db.Text, nullable=False)
     
-    related_id = db.Column(UUID(as_uuid=True), nullable=True) 
-    related_type = db.Column(db.String(30), nullable=True) 
+    # Related entity references
+    related_id = db.Column(db.String(36), nullable=True)  # order_id, bargain_id, dispute_id
+    related_type = db.Column(db.String(30), nullable=True)  # 'order', 'negotiation', 'dispute'
     
+    # Status
     is_read = db.Column(db.Boolean, default=False)
     read_at = db.Column(db.DateTime, nullable=True)
+    
+    # Timestamps
     created_at = db.Column(db.DateTime, default=datetime.utcnow)
 
-    user_rel = db.relationship("User", backref="notifications")
+    user = db.relationship("User", backref="notifications")
 
     def to_dict(self):
         return {
@@ -391,6 +400,7 @@ class Notification(db.Model):
 
 
 def create_notification(user_id, type, title, message, related_id=None, related_type=None):
+    """Helper function to create a notification"""
     notification = Notification(
         user_id=user_id,
         type=type,
@@ -402,24 +412,29 @@ def create_notification(user_id, type, title, message, related_id=None, related_
     db.session.add(notification)
     db.session.commit()
     return notification
-
 class PendingCheckout(db.Model, TimestampMixin):
+    """
+    Temporary storage for checkout data before payment is confirmed.
+    Order is only created when M-Pesa callback confirms payment success.
+    This prevents zombie orders on timeout/failure.
+    """
     __tablename__ = "pending_checkouts"
 
-    id = db.Column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
-    buyer_id = db.Column(UUID(as_uuid=True), db.ForeignKey("buyers.id"), nullable=False)
-    farmer_id = db.Column(UUID(as_uuid=True), db.ForeignKey("farmers.id"), nullable=False)
+    id = db.Column(db.String(36), primary_key=True, default=lambda: str(uuid.uuid4()))  # Same as temp_order_id
+    buyer_id = db.Column(db.String(36), db.ForeignKey("buyers.id"), nullable=False)
+    farmer_id = db.Column(db.String(36), db.ForeignKey("farmers.id"), nullable=False)
     bargain_id = db.Column(db.Integer, db.ForeignKey("bargain_sessions.id"), nullable=True)
-    order_id = db.Column(UUID(as_uuid=True), db.ForeignKey('orders.id'), nullable=True)
     
     items = db.Column(db.JSON, nullable=False)
     total_amount = db.Column(db.Numeric(10, 2), nullable=False)
     payment_method = db.Column(db.String(50), default="mpesa")
-    checkout_id = db.Column(db.String(100), nullable=True)
+    checkout_id = db.Column(db.String(100), nullable=True)  # M-Pesa CheckoutRequestID
+    
+    # Status: pending, paid, expired, cancelled
     status = db.Column(db.String(20), default="pending")
 
-    buyer_rel = db.relationship("Buyer", backref="pending_checkouts")
-    farmer_rel = db.relationship("Farmer", backref="pending_checkouts")
+    buyer = db.relationship("Buyer", backref="pending_checkouts")
+    farmer = db.relationship("Farmer", backref="pending_checkouts")
 
     def __repr__(self):
         return f"<PendingCheckout {self.id} | Status: {self.status}>"

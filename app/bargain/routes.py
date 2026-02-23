@@ -28,7 +28,7 @@ def create_session():
     except ValueError:
         return jsonify({"error": "Invalid user ID format"}), 400
 
-    user = User.query.get(user_id_uuid)
+    user = User.query.filter_by(id=str(user_id_uuid)).first()
     if not user:
         return jsonify({"error": "User not found"}), 404
 
@@ -133,13 +133,16 @@ def get_sessions():
     except ValueError:
         return jsonify({"error": "Invalid user ID format"}), 400
 
-    user = User.query.get(user_id_uuid)
+    user = User.query.filter_by(id=str(user_id_uuid)).first()
     if not user:
         return jsonify({"error": "User not found"}), 404
 
     try:
-        # Get sessions based on role
-        if user.role == "buyer":
+        # Get sessions based on role - ensure role is compared as lowercase string
+        user_role = user.role.value if hasattr(user.role, 'value') else str(user.role)
+        user_role = user_role.lower() if user_role else user_role
+        
+        if user_role == "buyer":
             buyer = Buyer.query.filter_by(user_id=user_id_uuid).first()
             if buyer:
                 sessions = (
@@ -150,7 +153,7 @@ def get_sessions():
                 )
             else:
                 sessions = []
-        elif user.role == "farmer":
+        elif user_role == "farmer":
             farmer = Farmer.query.filter_by(user_id=user_id_uuid).first()
             if farmer:
                 sessions = (
@@ -206,7 +209,7 @@ def get_session(session_id):
     if not session:
         return jsonify({"error": "Session not found"}), 404
 
-    user = User.query.get(user_id_uuid)
+    user = User.query.filter_by(id=str(user_id_uuid)).first()
     if not user:
         return jsonify({"error": "User not found"}), 404
 
@@ -214,10 +217,14 @@ def get_session(session_id):
     buyer = Buyer.query.filter_by(user_id=user_id_uuid).first()
     farmer = Farmer.query.filter_by(user_id=user_id_uuid).first()
 
+    # Ensure role is compared as lowercase string
+    user_role = user.role.value if hasattr(user.role, 'value') else str(user.role)
+    user_role = user_role.lower() if user_role else user_role
+    
     has_access = (
         (buyer and session.buyer_id == buyer.id)
         or (farmer and session.farmer_id == farmer.id)
-        or user.role == "admin"
+        or user_role == "admin"
     )
 
     if not has_access:
@@ -249,7 +256,7 @@ def counter_offer(session_id):
     except ValueError:
         return jsonify({"error": "Invalid user ID format"}), 400
 
-    user = User.query.get(user_id_uuid)
+    user = User.query.filter_by(id=str(user_id_uuid)).first()
     if not user:
         return jsonify({"error": "User not found"}), 404
 
@@ -358,7 +365,7 @@ def accept_offer(session_id):
     except ValueError:
         return jsonify({"error": "Invalid user ID format"}), 400
 
-    user = User.query.get(user_id_uuid)
+    user = User.query.filter_by(id=str(user_id_uuid)).first()
     if not user:
         return jsonify({"error": "User not found"}), 404
 
@@ -451,7 +458,7 @@ def reject_offer(session_id):
     except ValueError:
         return jsonify({"error": "Invalid user ID format"}), 400
 
-    user = User.query.get(user_id_uuid)
+    user = User.query.filter_by(id=str(user_id_uuid)).first()
     if not user:
         return jsonify({"error": "User not found"}), 404
 
@@ -534,12 +541,15 @@ def respond_session(session_id):
     except ValueError:
         return jsonify({"error": "Invalid user ID format"}), 400
 
-    user = User.query.get(user_id_uuid)
+    user = User.query.filter_by(id=str(user_id_uuid)).first()
     if not user:
         return jsonify({"error": "User not found"}), 404
 
     # Only farmers can respond
-    if user.role != "farmer":
+    user_role = user.role.value if hasattr(user.role, 'value') else str(user.role)
+    user_role = user_role.lower() if user_role else user_role
+    
+    if user_role != "farmer":
         return jsonify({"error": "Only farmers can respond to bargain sessions"}), 403
 
     session = BargainSession.query.get(session_id)
@@ -629,7 +639,7 @@ def add_message(session_id):
     except ValueError:
         return jsonify({"error": "Invalid user ID format"}), 400
 
-    user = User.query.get(user_id_uuid)
+    user = User.query.filter_by(id=str(user_id_uuid)).first()
     if not user:
         return jsonify({"error": "User not found"}), 404
 
@@ -690,7 +700,7 @@ def complete_session(session_id):
     except ValueError:
         return jsonify({"error": "Invalid user ID format"}), 400
 
-    user = User.query.get(user_id_uuid)
+    user = User.query.filter_by(id=str(user_id_uuid)).first()
     if not user:
         return jsonify({"error": "User not found"}), 404
 
@@ -736,7 +746,7 @@ def delete_message(message_id):
     except ValueError:
         return jsonify({"error": "Invalid user ID format"}), 400
 
-    user = User.query.get(user_id_uuid)
+    user = User.query.filter_by(id=str(user_id_uuid)).first()
     if not user:
         return jsonify({"error": "User not found"}), 404
 

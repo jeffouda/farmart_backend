@@ -9,8 +9,13 @@ import uuid
 def admin_required():
     """Check if user is admin"""
     user_id = uuid.UUID(get_jwt_identity())
-    user = User.query.get(user_id)
-    if not user or user.role != "admin":
+    user = User.query.filter_by(id=str(user_id)).first()
+    
+    # Ensure role is compared as lowercase string
+    user_role = user.role.value if hasattr(user.role, 'value') else str(user.role)
+    user_role = user_role.lower() if user_role else user_role
+    
+    if not user or user_role != "admin":
         return None
     return user
 
@@ -90,14 +95,14 @@ def get_all_orders_admin():
             # Get buyer info
             buyer = Buyer.query.get(order.buyer_id)
             if buyer:
-                buyer_user = User.query.get(buyer.user_id)
+                buyer_user = User.query.filter_by(id=str(buyer.user_id)).first()
                 order_dict["buyer_name"] = buyer_user.full_name if buyer_user else "Unknown"
                 order_dict["buyer_email"] = buyer_user.email if buyer_user else None
             
             # Get farmer info
             farmer = Farmer.query.get(order.farmer_id)
             if farmer:
-                farmer_user = User.query.get(farmer.user_id)
+                farmer_user = User.query.filter_by(id=str(farmer.user_id)).first()
                 order_dict["farmer_name"] = farmer_user.full_name if farmer_user else "Unknown"
                 order_dict["farmer_location"] = farmer.location if farmer else None
             
@@ -121,7 +126,7 @@ def get_all_farmers():
         
         farmers_data = []
         for farmer in farmers:
-            farmer_user = User.query.get(farmer.user_id)
+            farmer_user = User.query.filter_by(id=str(farmer.user_id)).first()
             animals_count = Animal.query.filter_by(farmer_id=farmer.id).count()
             orders_count = Order.query.filter_by(farmer_id=farmer.id).count()
             
@@ -160,7 +165,7 @@ def get_all_buyers():
         
         buyers_data = []
         for buyer in buyers:
-            buyer_user = User.query.get(buyer.user_id)
+            buyer_user = User.query.filter_by(id=str(buyer.user_id)).first()
             orders_count = Order.query.filter_by(buyer_id=buyer.id).count()
             
             buyers_data.append({
@@ -210,7 +215,7 @@ def suspend_user(user_id):
         return jsonify({"error": "Admin access required"}), 403
     
     try:
-        user = User.query.get(uuid.UUID(user_id))
+        user = User.query.filter_by(id=str(user_id)).first()
         if not user:
             return jsonify({"error": "User not found"}), 404
         
@@ -231,7 +236,7 @@ def activate_user(user_id):
         return jsonify({"error": "Admin access required"}), 403
     
     try:
-        user = User.query.get(uuid.UUID(user_id))
+        user = User.query.filter_by(id=str(user_id)).first()
         if not user:
             return jsonify({"error": "User not found"}), 404
         
@@ -251,7 +256,7 @@ def toggle_user_status(user_id):
     if not admin:
         return jsonify({"error": "Admin access required"}), 403
     
-    user = User.query.get(uuid.UUID(user_id))
+    user = User.query.filter_by(id=str(user_id)).first()
     if not user:
         return jsonify({"error": "User not found"}), 404
     

@@ -10,8 +10,7 @@ from datetime import datetime, timedelta
 # 1. USER ROUTES (Initiation & Status)
 # ==========================================
 
-
-@payment_bp.route('/stk-push', methods=['POST', 'OPTIONS'])
+@payment_bp.route('/stk-push', methods=['POST'])
 @jwt_required()
 def trigger_payment():
     """
@@ -26,18 +25,9 @@ def trigger_payment():
     amount = data.get('total_amount')
     items = data.get('items')
     farmer_id = data.get('farmer_id')
-    order_id = data.get('order_id')  # Link to existing order if any
 
-    if not all([phone, amount, items]):
+    if not all([phone, amount, items, farmer_id]):
         return jsonify({"error": "Missing required payment fields"}), 400
-
-    # Get farmer_id from items if not provided
-    if not farmer_id and items:
-        first_item = items[0] if isinstance(items, list) else items
-        farmer_id = first_item.get('farmer_id')
-
-    if not farmer_id:
-        return jsonify({"error": "Farmer ID is required"}), 400
 
     try:
         # 1. Initiate STK Push
@@ -55,14 +45,13 @@ def trigger_payment():
                 total_amount=amount,
                 items=items,
                 status="pending",
-                checkout_id=checkout_id,
-                order_id=order_id  # Link to existing order
+                checkout_id=checkout_id 
             )
             
             db.session.add(pending)
             db.session.commit()
             
-            current_app.logger.info(f"STK Push initiated: {checkout_id}. Pending record created with order_id: {order_id}")
+            current_app.logger.info(f"STK Push initiated: {checkout_id}. Pending record created.")
             
             return jsonify({
                 "message": "STK Push initiated", 
@@ -83,14 +72,20 @@ def check_order_status(checkout_id):
     """
     Frontend polls this to see if the callback has created the Order yet.
     """
+    # Check if an order has been created with this checkout ID
     order = Order.query.filter_by(checkout_id=checkout_id).first()
     if order:
         return jsonify({
-            "status": order.status,
+            "status": "paid",
             "order_id": order.id,
             "payment_status": "paid"
         }), 200
     
+    # Check if the pending record marked it as failed
+    pending = PendingCheckout.query.filter_by(checkout_id=checkout_id).first()
+    if pending and pending.status == "failed":
+        return jsonify({"status": "failed"}), 200
+        
     return jsonify({"status": "pending"}), 200
 
 
@@ -98,28 +93,30 @@ def check_order_status(checkout_id):
 @jwt_required()
 def confirm_and_release(order_id):
     """
-    UPDATED: Matches frontend call /api/payments/confirm-receipt/<id>
-    This triggers the Escrow release (B2C Payout to Farmer).
+    Triggers the Escrow release (B2C Payout to Farmer).
+    Captures ConversationID to track the asynchronous response from Safaricom.
     """
     order = Order.query.get_or_404(order_id)
     
-    # Ensure funds are currently held
+    # Ensure funds are currently held and not already being processed
     escrow = EscrowRecord.query.filter_by(order_id=order_id, status="held").first()
 
     if not escrow:
-        return jsonify({"error": "No funds in escrow or already released"}), 404
+        return jsonify({"error": "No funds in escrow or already released/processing"}), 404
 
     # Execute M-Pesa B2C Payout
     response = MpesaService.initiate_b2c(escrow.seller_phone, escrow.amount, str(order.id))
     
     if response.get('ResponseCode') == '0':
-        # Update records
-        escrow.status = "completed"
-        order.status = "completed"
+        # IMPORTANT: Capture ConversationID so the callback can find this record
+        escrow.b2c_conversation_id = response.get('ConversationID')
+        escrow.status = "releasing" # Interim status while waiting for callback
         db.session.commit()
-        return jsonify({"message": "Success! Funds released to farmer."}), 200
+        
+        current_app.logger.info(f"B2C Payout Initiated for Order {order_id}. CID: {escrow.b2c_conversation_id}")
+        return jsonify({"message": "Payout initiated. Waiting for Safaricom confirmation."}), 200
 
-    current_app.logger.error(f"B2C Payout Failed: {response}")
+    current_app.logger.error(f"B2C Payout Initiation Failed: {response}")
     return jsonify({"error": "Payout initiation failed", "details": response}), 400
 
 
@@ -131,6 +128,7 @@ def confirm_and_release(order_id):
 def mpesa_stk_callback():
     """
     Webhook from Safaricom. Creates order ONLY on successful payment.
+    Updates existing order if found, otherwise creates new one.
     """
     try:
         payload = request.get_json()
@@ -138,66 +136,78 @@ def mpesa_stk_callback():
         checkout_id = data.get('CheckoutRequestID')
         result_code = data.get('ResultCode')
         
-        current_app.logger.info(f"STK Callback - CheckoutID: {checkout_id}, ResultCode: {result_code}")
+        current_app.logger.info(f"STK CALLBACK DEBUG - CheckoutID: {checkout_id}, ResultCode: {result_code}")
         
-        # 1. Find the Pending Record
+        # 1. Check if there's an existing order with this checkout_id (from orders/routes.py)
+        existing_order = Order.query.filter_by(checkout_id=checkout_id).first()
+        current_app.logger.info(f"STK CALLBACK DEBUG - Found order by checkout_id: {existing_order is not None}")
+        
+        if existing_order:
+            # Update existing order from orders/routes.py flow
+            current_app.logger.info(f"STK CALLBACK DEBUG - Order {existing_order.id}: current status={existing_order.status}, payment_status={existing_order.payment_status}")
+            
+            if result_code == 0:
+                # Extract receipt
+                items_meta = data.get('CallbackMetadata', {}).get('Item', [])
+                receipt = next((item.get('Value') for item in items_meta if item.get('Name') == 'MpesaReceiptNumber'), "N/A")
+                
+                existing_order.status = "paid"
+                existing_order.payment_status = "paid"
+                existing_order.checkout_id = checkout_id
+                existing_order.mpesa_receipt = receipt
+                
+                # Mark animals as sold
+                for item_data in (existing_order.items or []):
+                    animal_id_str = item_data.get('animal_id')
+                    try:
+                        # Convert string UUID to UUID object for query
+                        animal_uuid = uuid.UUID(animal_id_str) if isinstance(animal_id_str, str) else animal_id_str
+                        animal = Animal.query.get(animal_uuid)
+                        if animal:
+                            animal.status = "sold"
+                            animal.is_available = False
+                    except (ValueError, AttributeError) as e:
+                        current_app.logger.error(f"Error updating animal {animal_id_str}: {e}")
+                
+                # Create escrow record
+                farmer = Farmer.query.get(existing_order.farmer_id)
+                escrow = EscrowRecord(
+                    order_id=existing_order.id,
+                    amount=existing_order.total_amount,
+                    status="held",
+                    mpesa_receipt=receipt,
+                    seller_phone=getattr(farmer, 'phone_number', 'N/A') if farmer else 'N/A'
+                )
+                db.session.add(escrow)
+                
+                current_app.logger.info(f"✅ Order {existing_order.id} updated to PAID. New status={existing_order.status}, payment_status={existing_order.payment_status}")
+            else:
+                existing_order.status = "failed"
+                existing_order.payment_status = "failed"
+                current_app.logger.info(f"❌ Order {existing_order.id} updated to FAILED (ResultCode={result_code})")
+            
+            db.session.commit()
+            return jsonify({"ResultCode": 0, "ResultDesc": "Accepted"}), 200
+        
+        # 2. Check for PendingCheckout (from payments/stk-push flow)
         pending = PendingCheckout.query.filter_by(checkout_id=checkout_id).first()
         
         if not pending:
-            current_app.logger.error(f"No Pending record for {checkout_id}")
+            current_app.logger.error(f"❌ No Pending record or Order found for checkout_id: {checkout_id}")
             return jsonify({"ResultCode": 0, "ResultDesc": "Accepted"}), 200
 
-        # 2. If Payment Failed
+        # 3. If Payment Failed (ResultCode != 0)
         if result_code != 0:
             pending.status = "failed"
             db.session.commit()
+            current_app.logger.warning(f"Payment failed for CheckoutID: {checkout_id}")
             return jsonify({"ResultCode": 0, "ResultDesc": "Accepted"}), 200
 
-        # 3. Payment SUCCESS - Extract Metadata
+        # 4. Payment SUCCESS - Extract Metadata
         items_meta = data.get('CallbackMetadata', {}).get('Item', [])
         receipt = next((item.get('Value') for item in items_meta if item.get('Name') == 'MpesaReceiptNumber'), "N/A")
         
-        # 4. Find the order to update - check multiple paths
-        existing_order = None
-        
-        # First, try to find by order_id from PendingCheckout
-        if pending.order_id:
-            existing_order = Order.query.get(pending.order_id)
-            current_app.logger.info(f"Looking for order by order_id: {pending.order_id}")
-        
-        # Fallback: try by checkout_id
-        if not existing_order:
-            existing_order = Order.query.filter_by(checkout_id=checkout_id).first()
-            current_app.logger.info(f"Looking for order by checkout_id: {checkout_id}")
-        
-        if existing_order:
-            # Update existing order - this is the one the frontend is polling!
-            existing_order.status = "paid"
-            existing_order.payment_status = "paid"
-            existing_order.mpesa_receipt = receipt
-            existing_order.checkout_id = checkout_id  # Ensure checkout_id is set
-            
-            # Update escrow
-            escrow = EscrowRecord.query.filter_by(order_id=existing_order.id).first()
-            if escrow:
-                escrow.status = "held"
-                escrow.mpesa_receipt = receipt
-            
-            # Mark animals as sold
-            for item_data in (existing_order.items or []):
-                animal = Animal.query.get(item_data.get('animal_id'))
-                if animal:
-                    animal.status = "sold"
-                    animal.is_available = False
-            
-            # Cleanup pending
-            pending.status = "completed"
-            db.session.commit()
-            
-            current_app.logger.info(f"✅ Order {existing_order.id} updated to paid status.")
-            return jsonify({"ResultCode": 0, "ResultDesc": "Accepted"}), 200
-        
-        # 5. No existing order - create new one (fallback)
+        # 5. Create the Actual Order
         new_order = Order(
             id=str(uuid.uuid4()),
             buyer_id=pending.buyer_id,
@@ -212,10 +222,16 @@ def mpesa_stk_callback():
         
         # 6. Mark Animal as Sold
         for item_data in (pending.items or []):
-            animal = Animal.query.get(item_data.get('animal_id'))
-            if animal:
-                animal.status = "sold"
-                animal.is_available = False
+            animal_id_str = item_data.get('animal_id')
+            try:
+                # Convert string UUID to UUID object for query
+                animal_uuid = uuid.UUID(animal_id_str) if isinstance(animal_id_str, str) else animal_id_str
+                animal = Animal.query.get(animal_uuid)
+                if animal:
+                    animal.status = "sold"
+                    animal.is_available = False
+            except (ValueError, AttributeError) as e:
+                current_app.logger.error(f"Error updating animal {animal_id_str}: {e}")
 
         # 7. Create Escrow Record
         farmer = Farmer.query.get(pending.farmer_id)
@@ -232,7 +248,7 @@ def mpesa_stk_callback():
         pending.status = "completed"
         db.session.commit()
         
-        current_app.logger.info(f"✅ Order {new_order.id} created and Escrowed.")
+        current_app.logger.info(f"✅ Order {new_order.id} verified and Escrowed.")
         return jsonify({"ResultCode": 0, "ResultDesc": "Accepted"}), 200
         
     except Exception as e:
@@ -242,25 +258,33 @@ def mpesa_stk_callback():
 
 @payment_bp.route('/callback/b2c', methods=['POST'])
 def mpesa_b2c_callback():
+    """
+    Final confirmation of the payout to the farmer.
+    """
     payload = request.get_json()
     result = payload.get('Result', {})
     result_code = result.get('ResultCode')
     conversation_id = result.get('ConversationID')
 
-    # Find the record to update its status based on Safaricom's final word
+    # Find the escrow record using the ConversationID captured during initiation
     escrow = EscrowRecord.query.filter_by(b2c_conversation_id=conversation_id).first()
 
+    if not escrow:
+        current_app.logger.error(f"B2C Callback received for unknown ConversationID: {conversation_id}")
+        return jsonify({"ResultCode": 0, "ResultDesc": "Accepted"}), 200
+
     if result_code == 0:
-        current_app.logger.info("✅ B2C Payout Success.")
-        if escrow:
-            escrow.status = "released"
+        current_app.logger.info(f"✅ B2C Payout Success for Escrow {escrow.id}")
+        escrow.status = "released"
+        # Update the associated order status to fully completed
+        order = Order.query.get(escrow.order_id)
+        if order:
+            order.status = "completed"
     else:
-        # This is where your 2040 error will be caught
+        # Catch errors like 2040 (Insufficient funds in your shortcode)
         error_msg = result.get('ResultDesc')
-        current_app.logger.error(f"❌ B2C Payout Failed: {error_msg}")
-        if escrow:
-            escrow.status = "held" # Revert to held so you can try again
-            # Optionally revert order status too
+        current_app.logger.error(f"❌ B2C Payout Failed for CID {conversation_id}: {error_msg}")
+        escrow.status = "held" # Revert to 'held' so the admin/system can retry
     
     db.session.commit()
     return jsonify({"ResultCode": 0, "ResultDesc": "Accepted"}), 200
