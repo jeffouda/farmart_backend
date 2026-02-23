@@ -31,7 +31,7 @@ def get_my_reviews():
         .all()
     )
 
-    user = User.query.get(current_user_id)
+    user = User.query.filter_by(id=str(current_user_id)).first()
 
     return jsonify({
         "farmer": {
@@ -219,7 +219,7 @@ def _update_farmer_rating(farmer_user_id):
     """
     Recalculate and update the farmer's average rating.
     """
-    user = User.query.get(farmer_user_id)
+    user = User.query.filter_by(id=str(farmer_user_id)).first()
     if not user:
         return
 

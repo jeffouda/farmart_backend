@@ -25,7 +25,7 @@ def get_conversation(livestock_id):
     except ValueError:
         return jsonify({"error": "Invalid user ID format"}), 400
 
-    user = User.query.get(user_id_uuid)
+    user = User.query.filter_by(id=str(user_id_uuid)).first()
     if not user:
         return jsonify({"error": "User not found"}), 404
 
@@ -80,7 +80,7 @@ def send_message(livestock_id):
     except ValueError:
         return jsonify({"error": "Invalid user ID format"}), 400
 
-    user = User.query.get(user_id_uuid)
+    user = User.query.filter_by(id=str(user_id_uuid)).first()
     if not user:
         return jsonify({"error": "User not found"}), 404
 
@@ -105,7 +105,7 @@ def send_message(livestock_id):
     except ValueError:
         return jsonify({"error": "Invalid receiver ID format"}), 400
 
-    receiver = User.query.get(receiver_uuid)
+    receiver = User.query.filter_by(id=str(receiver_uuid)).first()
     if not receiver:
         return jsonify({"error": "Receiver not found"}), 404
 
@@ -145,7 +145,7 @@ def get_conversations():
     except ValueError:
         return jsonify({"error": "Invalid user ID format"}), 400
 
-    user = User.query.get(user_id_uuid)
+    user = User.query.filter_by(id=str(user_id_uuid)).first()
     if not user:
         return jsonify({"error": "User not found"}), 404
 

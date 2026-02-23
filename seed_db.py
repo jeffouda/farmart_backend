@@ -15,7 +15,7 @@ with app.app_context():
     if not admin:
         admin = User(
             email="admin@farmart.com",
-            role=UserRole.ADMIN,
+            role=UserRole.ADMIN,  # Use uppercase enum value
             full_name="Admin User",
             is_active=True,
         )
@@ -28,7 +28,7 @@ with app.app_context():
     if not farmer_user:
         farmer_user = User(
             email="farmer@test.com",
-            role=UserRole.FARMER,
+            role=UserRole.FARMER,  # Use uppercase enum value
             full_name="John Kamau",
             phone_number="+254712345678",
             location="Nakuru",
