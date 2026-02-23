@@ -5,6 +5,7 @@ from app.models import (
     User,
     Farmer,
     Buyer,
+    UserRole,
 )
 from . import auth_bp
 from datetime import datetime
@@ -53,10 +54,13 @@ def register():
     if User.query.filter_by(email=email).first():
         return jsonify({"error": "Email already registered"}), 409
 
+    # Convert role string to enum
+    role_enum = UserRole.FARMER if role == "farmer" else UserRole.BUYER
+
     # Create the Base User with profile data
     new_user = User(
         email=email,
-        role=role,  # Use string directly
+        role=role_enum,  # Use enum instead of string directly
         full_name=full_name,
         phone_number=phone_number,
         location=location,
@@ -278,14 +282,18 @@ def update_profile():
     if "location" in data:
         user.location = data["location"]
 
+    # Get role for comparison (convert enum to lowercase string)
+    user_role = user.role.value if hasattr(user.role, 'value') else str(user.role)
+    user_role_lower = user_role.lower() if user_role else user_role
+
     # Update role-specific fields
-    if user.role == "farmer" and user.farmer:
+    if user_role_lower == "farmer" and user.farmer:
         if "farm_name" in data:
             user.farmer.farm_name = data["farm_name"]
         if "farm_location" in data:
             user.farmer.location = data["farm_location"]
         # Note: phone_number should be updated on user level, not farmer level for uniqueness reasons
-    elif user.role == "buyer" and user.buyer:
+    elif user_role_lower == "buyer" and user.buyer:
         if "delivery_address" in data:
             user.buyer.delivery_address = data["delivery_address"]
         if "preferred_contact" in data:
