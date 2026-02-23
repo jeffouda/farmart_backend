@@ -73,6 +73,52 @@ def create_app(config_name="default"):
                     print(f"⚠️ Data fix notice: {e}")
                     connection.execute(text("COMMIT"))
                 
+                # --- Fix Admin Role: Ensure admin@farmart.com has ADMIN role ---
+                # This handles cases where the admin user was created with wrong role
+                try:
+                    connection.execute(text("""
+                        UPDATE users SET role = 'ADMIN' 
+                        WHERE email = 'admin@farmart.com' AND role != 'ADMIN';
+                    """))
+                    connection.execute(text("COMMIT"))
+                    print("✅ Production: Fixed admin user role.")
+                except Exception as e:
+                    print(f"⚠️ Admin role fix notice: {e}")
+                    connection.execute(text("COMMIT"))
+                
+                # --- Create admin1@farmart.com if doesn't exist ---
+                try:
+                    # First check if admin1@farmart.com exists
+                    result = connection.execute(text("""
+                        SELECT id FROM users WHERE email = 'admin1@farmart.com'
+                    """))
+                    existing = result.fetchone()
+                    
+                    if not existing:
+                        # Generate UUID for the new admin
+                        import uuid
+                        admin1_id = str(uuid.uuid4())
+                        from werkzeug.security import generate_password_hash
+                        password_hash = generate_password_hash("admin1234")
+                        
+                        connection.execute(text("""
+                            INSERT INTO users (id, email, password_hash, role, is_active, full_name, created_at, updated_at)
+                            VALUES (:id, :email, :password_hash, 'ADMIN', true, 'Admin User', NOW(), NOW())
+                        """), {"id": admin1_id, "email": "admin1@farmart.com", "password_hash": password_hash})
+                        connection.execute(text("COMMIT"))
+                        print("✅ Production: Created admin1@farmart.com user.")
+                    else:
+                        # Fix role if user exists but wrong role
+                        connection.execute(text("""
+                            UPDATE users SET role = 'ADMIN' 
+                            WHERE email = 'admin1@farmart.com' AND role != 'ADMIN';
+                        """))
+                        connection.execute(text("COMMIT"))
+                        print("✅ Production: Fixed admin1@farmart.com user role.")
+                except Exception as e:
+                    print(f"⚠️ Admin1 creation notice: {e}")
+                    connection.execute(text("COMMIT"))
+                
                 # --- Fix Missing order_id Column ---
                 try:
                     # PostgreSQL DO block to add column if missing
