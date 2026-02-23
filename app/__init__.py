@@ -51,14 +51,27 @@ def create_app(config_name="default"):
                 connection.execute(text("COMMIT"))
                 
                 # --- Fix Enum Case/Value Issues ---
-                # This adds 'farmer' and 'buyer' to the DB type if they don't exist
-                for role in ['farmer', 'buyer', 'admin']:
+                # This adds 'FARMER', 'BUYER', 'ADMIN' to the DB type if they don't exist
+                # Using uppercase to match the UserRole enum in models.py
+                for role in ['FARMER', 'BUYER', 'ADMIN']:
                     try:
                         connection.execute(text(f"ALTER TYPE userrole ADD VALUE '{role}';"))
                         connection.execute(text("COMMIT"))
                         print(f"✅ Production: Added {role} to userrole enum.")
                     except Exception:
                         connection.execute(text("COMMIT")) # Already exists
+                
+                # --- Fix Existing Data: Convert lowercase to uppercase ---
+                # Update any existing lowercase enum values to uppercase
+                try:
+                    connection.execute(text("UPDATE users SET role = 'ADMIN' WHERE role = 'admin';"))
+                    connection.execute(text("UPDATE users SET role = 'FARMER' WHERE role = 'farmer';"))
+                    connection.execute(text("UPDATE users SET role = 'BUYER' WHERE role = 'buyer';"))
+                    connection.execute(text("COMMIT"))
+                    print("✅ Production: Fixed existing lowercase enum values.")
+                except Exception as e:
+                    print(f"⚠️ Data fix notice: {e}")
+                    connection.execute(text("COMMIT"))
                 
                 # --- Fix Missing order_id Column ---
                 try:
