@@ -289,13 +289,17 @@ def list_animals():
     location = request.args.get('location')
     sort_by = request.args.get('sort', 'newest')
 
-    # 2. Base Query: Only show 'available' animals to the public
+    # 2. Base Query: Show animals with quantity > 0
     show_sold = request.args.get('show_sold', 'false').lower() == 'true'
     
     if show_sold:
         query = Animal.query  # Show all animals
     else:
-        query = Animal.query.filter(Animal.status.ilike("available"))
+        # Show available animals with quantity > 0
+        query = Animal.query.filter(
+            Animal.status.ilike("available"),
+            Animal.quantity > 0
+        )
 
     # 3. Apply Filters
     if search_query:
@@ -426,7 +430,11 @@ def get_livestock():
         if show_sold:
             query = Animal.query  # Show all animals
         else:
-            query = Animal.query.filter(Animal.status.ilike("available"))
+            # Show available animals with quantity > 0
+            query = Animal.query.filter(
+                Animal.status.ilike("available"),
+                Animal.quantity > 0
+            )
 
         # Search filter
         if search:
@@ -573,13 +581,17 @@ def get_animal(animal_id):
         return jsonify({"error": "Internal server error", "details": str(e)}), 500
 
 
-@livestock_bp.route("/<string:animal_id>", methods=["PUT"])
-@jwt_required()
+@livestock_bp.route("/<string:animal_id>", methods=["PUT", "OPTIONS"])
+@jwt_required(optional=True)
 def update_animal(animal_id):
     """
     Update an animal's details.
     Only the owner farmer can update their animal.
     """
+    # Handle OPTIONS preflight
+    if request.method == "OPTIONS":
+        return jsonify({"status": "ok"}), 200
+    
     user_id_str = get_jwt_identity()
 
     user = User.query.filter_by(id=user_id_str).first()
@@ -612,6 +624,20 @@ def update_animal(animal_id):
         animal.status = data["status"]
     if "image_url" in data:
         animal.image_url = data["image_url"]
+    if "quantity" in data:
+        animal.quantity = int(data["quantity"])
+    if "species" in data:
+        animal.species = data["species"]
+    if "breed" in data:
+        animal.breed = data["breed"]
+    if "age" in data:
+        animal.age = int(data["age"]) if data["age"] else None
+    if "weight" in data:
+        animal.weight = float(data["weight"]) if data["weight"] else None
+    if "gender" in data:
+        animal.gender = data["gender"]
+    if "health_history" in data:
+        animal.health_history = data["health_history"]
 
     db.session.commit()
 
