@@ -505,6 +505,7 @@ def get_livestock():
                 "gender": animal.gender,
                 "health_history": animal.health_history,
                 "image_url": process_image_url(animal.image_url),
+                "quantity": animal.quantity or 1,
                 "farmer_id": str(animal.farmer_id),
                 "created_at": animal.created_at.isoformat()
                 if animal.created_at
