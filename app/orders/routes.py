@@ -368,16 +368,16 @@ def confirm_delivery(order_id):
 @jwt_required()
 def poll_order_status(order_id):
     """Poll for order status updates"""
-    order_uuid = get_uuid(order_id)
-    if not order_uuid:
-        return jsonify({"error": "Invalid order ID format"}), 400
-    
-    order = Order.query.get(order_uuid)
-    if not order:
-        return jsonify({"error": "Order not found"}), 404
-    
-    return jsonify({
-        "order_id": str(order.id),
-        "status": order.status,
-        "payment_status": order.payment_status,
-    }), 200
+    try:
+        order = Order.query.filter_by(id=order_id).first()
+        if not order:
+            return jsonify({"error": "Order not found"}), 404
+        
+        return jsonify({
+            "order_id": str(order.id),
+            "status": order.status,
+            "payment_status": order.payment_status,
+        }), 200
+    except Exception as e:
+        print(f"Poll status error: {e}")
+        return jsonify({"error": "Internal server error"}), 500
