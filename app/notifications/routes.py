@@ -2,10 +2,8 @@ from flask import Blueprint, request, jsonify
 from flask_jwt_extended import jwt_required, get_jwt_identity, verify_jwt_in_request
 from app.models import db, Notification, User, Order, Farmer, Buyer
 from app.models import create_notification
+from . import notifications_bp
 import uuid
-
-# Removed strict_slashes=False from here to prevent server crash
-notifications_bp = Blueprint('notifications', __name__)
 
 def get_uuid(val):
     """Helper to convert string to UUID."""
@@ -18,11 +16,14 @@ def get_uuid(val):
 
 @notifications_bp.route('', methods=['GET', 'OPTIONS'])
 @notifications_bp.route('/', methods=['GET', 'OPTIONS'])
-@jwt_required()
 def get_notifications():
     """Get all notifications for the current user"""
     if request.method == 'OPTIONS':
         return jsonify({"status": "ok"}), 200
+    
+    # Only require JWT for GET requests
+    from flask_jwt_extended import verify_jwt_in_request
+    verify_jwt_in_request()
 
     try:
         user_id = get_uuid(get_jwt_identity())
@@ -62,11 +63,14 @@ def get_notifications():
 
 
 @notifications_bp.route('/unread-count', methods=['GET', 'OPTIONS'])
-@jwt_required()
 def get_unread_count():
     """Get the count of unread notifications - Preflight Handled"""
     if request.method == 'OPTIONS':
         return jsonify({"status": "ok"}), 200
+    
+    # Only require JWT for GET requests
+    from flask_jwt_extended import verify_jwt_in_request
+    verify_jwt_in_request()
 
     try:
         user_id = get_uuid(get_jwt_identity())
@@ -83,11 +87,13 @@ def get_unread_count():
 
 
 @notifications_bp.route('/<int:notification_id>/read', methods=['PUT', 'OPTIONS'])
-@jwt_required()
 def mark_notification_read(notification_id):
     """Mark a single notification as read"""
     if request.method == 'OPTIONS':
         return jsonify({"status": "ok"}), 200
+    
+    from flask_jwt_extended import verify_jwt_in_request
+    verify_jwt_in_request()
 
     try:
         user_id = get_jwt_identity()
@@ -109,11 +115,13 @@ def mark_notification_read(notification_id):
 
 
 @notifications_bp.route('/read-all', methods=['PUT', 'OPTIONS'])
-@jwt_required()
 def mark_all_read():
     """Mark all notifications as read for the current user"""
     if request.method == 'OPTIONS':
         return jsonify({"status": "ok"}), 200
+    
+    from flask_jwt_extended import verify_jwt_in_request
+    verify_jwt_in_request()
 
     try:
         user_id = get_jwt_identity()
@@ -129,11 +137,13 @@ def mark_all_read():
 
 
 @notifications_bp.route('/<int:notification_id>', methods=['DELETE', 'OPTIONS'])
-@jwt_required()
 def delete_notification(notification_id):
     """Delete a notification"""
     if request.method == 'OPTIONS':
         return jsonify({"status": "ok"}), 200
+    
+    from flask_jwt_extended import verify_jwt_in_request
+    verify_jwt_in_request()
 
     try:
         user_id = get_jwt_identity()
