@@ -54,13 +54,10 @@ def register():
     if User.query.filter_by(email=email).first():
         return jsonify({"error": "Email already registered"}), 409
 
-    # Convert role string to enum
-    role_enum = UserRole.FARMER if role == "farmer" else UserRole.BUYER
-
     # Create the Base User with profile data
     new_user = User(
         email=email,
-        role=role_enum,  # Use enum instead of string directly
+        role=UserRole(role.upper()),
         full_name=full_name,
         phone_number=phone_number,
         location=location,
@@ -135,39 +132,20 @@ def register():
 # LOGIN ROUTE
 @auth_bp.route("/login", methods=["POST"])
 def login():
-    import logging
-    
-    logger = logging.getLogger(__name__)
-    
     data = request.get_json()
+
     email = data.get("email")
     password = data.get("password")
-    
-    logger.info(f"🔐 Login attempt for email: {email}")
 
     # Find user
     user = User.query.filter_by(email=email).first()
-    
-    if not user:
-        logger.warning(f"❌ User not found: {email}")
-        return jsonify({"error": "Invalid credentials"}), 401
-    
-    logger.info(f"✅ User found: {user.email}, role: {user.role}")
-    
+
     # Check password
     if user and user.check_password(password):
-        # Ensure role is always a lowercase string
-        user_role = user.role.value if hasattr(user.role, 'value') else str(user.role)
-        user_role = user_role.lower() if user_role else user_role
-        
-        logger.info(f"🎫 Creating JWT with role: {user_role}")
-        
         # Create JWT Token
         access_token = create_access_token(
-            identity=str(user.id), additional_claims={"role": user_role}
+            identity=str(user.id), additional_claims={"role": user.role}
         )
-        
-        logger.info(f"✅ Login successful for: {email}")
 
         return jsonify({
             "message": "Login successful",
@@ -175,14 +153,13 @@ def login():
             "user": {
                 "id": str(user.id),
                 "email": user.email,
-                "role": user_role,
+                "role": user.role,
                 "full_name": user.full_name,
                 "phone_number": user.phone_number,
                 "location": user.location,
             },
         }), 200
 
-    logger.warning(f"❌ Invalid credentials for: {email}")
     return jsonify({"error": "Invalid credentials"}), 401
 
 
@@ -208,7 +185,7 @@ def debug_login():
 
     return jsonify({
         "email": user.email,
-        "role": user.role.value if hasattr(user.role, "value") else user.role,
+        "role": str(user.role),
         "password_hash": user.password_hash[:20] + "...",
         "password_matches": password_matches,
         "debug": "Password check result",
@@ -222,21 +199,17 @@ def get_current_user():
     # Get user ID from JWT token (returns string UUID)
     user_id_str = get_jwt_identity()
 
-    # Find user in database (use string directly)
+    # Find user in database using string ID (UUIDType handles conversion)
     user = User.query.filter_by(id=user_id_str).first()
 
     if not user:
         return jsonify({"error": "User not found"}), 404
 
-    # Ensure role is always a lowercase string
-    user_role = user.role.value if hasattr(user.role, 'value') else str(user.role)
-    user_role = user_role.lower() if user_role else user_role
-
-    # Build response with user data - role is now a string
+    # Build response with user data
     user_data = {
         "id": str(user.id),
         "email": user.email,
-        "role": user_role,
+        "role": user.role.value if hasattr(user.role, 'value') else str(user.role),
         "full_name": user.full_name,
         "phone_number": user.phone_number,
         "location": user.location,
@@ -246,13 +219,13 @@ def get_current_user():
     }
 
     # Add role-specific profile data
-    if user_role == "farmer" and user.farmer:
+    if user.role.value == "farmer" and user.farmer:
         user_data["farm_name"] = user.farmer.farm_name
         user_data["farm_location"] = user.farmer.location
         user_data["farm_phone_number"] = user.farmer.phone_number
         user_data["is_verified"] = user.farmer.is_verified
         user_data["wallet_balance"] = float(user.farmer.wallet_balance) if user.farmer.wallet_balance else 0
-    elif user_role == "buyer" and user.buyer:
+    elif user.role.value == "buyer" and user.buyer:
         user_data["delivery_address"] = user.buyer.delivery_address
         user_data["preferred_contact"] = user.buyer.preferred_contact
 
@@ -266,8 +239,12 @@ def update_profile():
     """Update current user's profile"""
     user_id_str = get_jwt_identity()
 
-    # Use string directly since database stores UUIDs as strings
-    user = User.query.filter_by(id=user_id_str).first()
+    try:
+        user_id_uuid = uuid.UUID(user_id_str)
+    except ValueError:
+        return jsonify({"error": "Invalid user ID format"}), 400
+
+    user = User.query.get(user_id_uuid)
 
     if not user:
         return jsonify({"error": "User not found"}), 404
@@ -282,18 +259,14 @@ def update_profile():
     if "location" in data:
         user.location = data["location"]
 
-    # Get role for comparison (convert enum to lowercase string)
-    user_role = user.role.value if hasattr(user.role, 'value') else str(user.role)
-    user_role_lower = user_role.lower() if user_role else user_role
-
     # Update role-specific fields
-    if user_role_lower == "farmer" and user.farmer:
+    if user.role.value == "farmer" and user.farmer:
         if "farm_name" in data:
             user.farmer.farm_name = data["farm_name"]
         if "farm_location" in data:
             user.farmer.location = data["farm_location"]
         # Note: phone_number should be updated on user level, not farmer level for uniqueness reasons
-    elif user_role_lower == "buyer" and user.buyer:
+    elif user.role.value == "buyer" and user.buyer:
         if "delivery_address" in data:
             user.buyer.delivery_address = data["delivery_address"]
         if "preferred_contact" in data:
@@ -307,4 +280,3 @@ def update_profile():
     except Exception as e:
         db.session.rollback()
         return jsonify({"error": str(e)}), 500
-

@@ -16,6 +16,7 @@ def get_uuid(val):
     except (ValueError, AttributeError):
         return None
 
+@notifications_bp.route('', methods=['GET', 'OPTIONS'])
 @notifications_bp.route('/', methods=['GET', 'OPTIONS'])
 @jwt_required()
 def get_notifications():

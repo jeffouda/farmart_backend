@@ -26,8 +26,24 @@ def trigger_payment():
     items = data.get('items')
     farmer_id = data.get('farmer_id')
 
-    if not all([phone, amount, items, farmer_id]):
+    # If farmer_id not provided, extract from first animal
+    if not farmer_id and items:
+        first_item = items[0] if isinstance(items, list) else {}
+        animal_id = first_item.get('animal_id')
+        print(f"🔍 STK DEBUG: first_item={first_item}, animal_id={animal_id}")
+        if animal_id:
+            # Use filter_by instead of query.get for UUID
+            animal = Animal.query.filter_by(id=str(animal_id)).first()
+            print(f"🔍 STK DEBUG: animal found={animal is not None}")
+            if animal:
+                farmer_id = str(animal.farmer_id)
+                print(f"🔍 STK DEBUG: farmer_id={farmer_id}")
+
+    if not all([phone, amount, items]):
         return jsonify({"error": "Missing required payment fields"}), 400
+
+    if not farmer_id:
+        return jsonify({"error": "Could not determine farmer_id for this order"}), 400
 
     try:
         # 1. Initiate STK Push

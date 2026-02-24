@@ -1,4 +1,4 @@
-from flask import request, jsonify, current_app
+from flask import request, jsonify
 from flask_jwt_extended import jwt_required, get_jwt_identity
 from app import db
 from app.models import (
@@ -14,7 +14,6 @@ from . import orders_bp
 import uuid
 from datetime import datetime
 
-from app.services.mpesa_service import MpesaService
 
 def get_uuid(val):
     """Helper to convert string to UUID."""
@@ -25,18 +24,15 @@ def get_uuid(val):
     except (ValueError, AttributeError):
         return None
 
+
 @orders_bp.route("/", methods=["POST"])
 @jwt_required()
 def create_order():
-    """Create order and trigger M-Pesa STK Push"""
-    user_id = uuid.UUID(get_jwt_identity())
-    user = User.query.filter_by(id=str(user_id)).first()
+    """Create order from cart items"""
+    user_id = get_jwt_identity()
+    user = User.query.filter_by(id=user_id).first()
 
-    # Convert enum to string for comparison
-    user_role = user.role.value if hasattr(user.role, 'value') else str(user.role)
-    user_role_lower = user_role.lower() if user_role else user_role
-
-    if not user or user_role_lower != "buyer":
+    if not user or user.role.value != "buyer":
         return jsonify({"error": "Only buyers can create orders"}), 403
 
     buyer = Buyer.query.filter_by(user_id=user_id).first()
@@ -45,9 +41,6 @@ def create_order():
 
     data = request.get_json()
     items = data.get("items", [])
-    payment_method = data.get("payment_method", "mpesa")
-    # Frontend passes phone as 'phone_number' or 'phone'
-    phone_number = data.get("phone_number") or data.get("phone")
 
     if not items:
         return jsonify({"error": "No items in order"}), 400
@@ -55,9 +48,12 @@ def create_order():
     # Group items by farmer
     farmer_orders = {}
     for item in items:
+        # Support both 'id' and 'animal_id' from frontend
         animal_id = item.get("animal_id") or item.get("id")
-        animal = Animal.query.get(uuid.UUID(animal_id))
-        
+        if not animal_id:
+            return jsonify({"error": "Missing animal ID in item"}), 400
+
+        animal = Animal.query.filter_by(id=animal_id).first()
         if not animal or animal.status != "available":
             return jsonify({"error": f"Animal {animal_id} not available"}), 400
 
@@ -66,243 +62,311 @@ def create_order():
             farmer_orders[farmer_id] = []
         farmer_orders[farmer_id].append({
             "animal_id": str(animal.id),
+            "species": animal.species,
+            "breed": animal.breed,
             "price": float(item.get("price", animal.price)),
             "quantity": item.get("quantity", 1),
         })
 
+    # Create separate order per farmer
     created_orders = []
-    total_bill = 0
-
-    # Create separate order per farmer (Escrow Logic)
     for farmer_id, order_items in farmer_orders.items():
-        sub_total = sum(item["price"] * item["quantity"] for item in order_items)
-        total_bill += sub_total
+        total = sum(item["price"] * item["quantity"] for item in order_items)
 
         order = Order(
             buyer_id=buyer.id,
-            farmer_id=uuid.UUID(farmer_id),
+            farmer_id=farmer_id,
             items=order_items,
-            total_amount=sub_total,
+            total_amount=total,
             status="pending",
             payment_status="pending",
         )
         db.session.add(order)
-        db.session.flush() # Get ID before commit
+        db.session.flush()
 
         # Mark animals as pending
         for item in order_items:
-            animal = Animal.query.get(uuid.UUID(item["animal_id"]))
-            animal.status = "pending"
+            animal = Animal.query.filter_by(id=item["animal_id"]).first()
+            if animal:
+                animal.status = "pending"
 
-        # Initialize Escrow
-        farmer = Farmer.query.get(uuid.UUID(farmer_id))
+        # Create escrow record
+        farmer = Farmer.query.filter_by(id=farmer_id).first()
         escrow = EscrowRecord(
             order_id=order.id,
-            amount=sub_total,
-            seller_phone=farmer.phone_number,
+            amount=total,
+            seller_phone=farmer.phone_number if farmer else "",
             status="pending",
         )
         db.session.add(escrow)
-        created_orders.append(order)
 
-    # --- TRIGGER MPESA STK PUSH ---
-    if payment_method == "mpesa":
-        if not phone_number:
-            return jsonify({"error": "Phone number required for M-Pesa"}), 400
-        
-        # Trigger the actual STK Push
-        stk_response = MpesaService.stk_push(phone_number, total_bill, str(created_orders[0].id))
-        
-        # Check if STK Push was initiated successfully
-        if stk_response.get('ResponseCode') == '0':
-            checkout_id = stk_response.get('CheckoutRequestID')
-            # Update the order with checkout ID for tracking
-            created_orders[0].checkout_id = checkout_id
-            current_app.logger.info(f"STK Push initiated: {checkout_id} for Order {created_orders[0].id}")
-        else:
-            current_app.logger.error(f"STK Push failed: {stk_response}")
-            return jsonify({
-                "error": "Failed to initiate M-Pesa payment",
-                "details": stk_response
-            }), 400
+        # Notify farmer
+        if farmer:
+            create_notification(
+                user_id=farmer.user_id,
+                type="new_order",
+                title="New Order Received",
+                message=f"You have a new order worth KES {total}",
+                related_id=order.id,
+                related_type="order",
+            )
+
+        created_orders.append({"id": str(order.id), **order.to_dict()})
 
     db.session.commit()
 
+    # Return first order ID for frontend compatibility
     return jsonify({
-        "order_id": str(created_orders[0].id),
-        "message": "Order placed! Check your phone for M-Pesa prompt.",
-        "total": total_bill
+        "orders": created_orders,
+        "order_id": str(created_orders[0]["id"]) if created_orders else None,
+        "message": "Order created successfully",
     }), 201
 
-@orders_bp.route("/poll-status/<order_id>", methods=["GET"])
-@jwt_required()
-def poll_order_status(order_id):
-    """Poll for M-Pesa callback updates"""
-    order_uuid = get_uuid(order_id)
-    order = Order.query.get(order_uuid)
-    
-    if not order:
-        return jsonify({"error": "Order not found"}), 404
-    
-    current_app.logger.info(f"POLL DEBUG - Order {order_id}: status={order.status}, payment_status={order.payment_status}, checkout_id={order.checkout_id}")
-    
-    return jsonify({
-        "order_id": str(order.id),
-        "status": order.status,
-        "payment_status": order.payment_status, # This changes when Safaricom hits your Callback URL
-    }), 200
-
-@orders_bp.route("/<order_id>/confirm-delivery", methods=["POST"])
-@jwt_required()
-def confirm_delivery(order_id):
-    """Buyer confirms delivery -> Release Escrow to Farmer"""
-    order_uuid = get_uuid(order_id)
-    order = Order.query.get(order_uuid)
-    
-    if not order or order.payment_status != "paid":
-        return jsonify({"error": "Order not paid or not found"}), 400
-
-    order.status = "delivered"
-    
-    # Release Funds
-    if order.escrow:
-        order.escrow.status = "released"
-        farmer = Farmer.query.get(order.farmer_id)
-        farmer.wallet_balance += order.total_amount
-
-    # Notification
-    create_notification(
-        user_id=order.farmer.user_id,
-        type="payment_release",
-        title="Funds Released",
-        message=f"KES {order.total_amount} released to your wallet.",
-        related_id=order.id,
-        related_type="order"
-    )
-
-    db.session.commit()
-    return jsonify({"message": "Funds released to farmer"}), 200
-
-@orders_bp.route("/<order_id>", methods=["GET"])
-@jwt_required()
-def get_order(order_id):
-    """Get order by ID"""
-    order_uuid = get_uuid(order_id)
-    order = Order.query.get(order_uuid)
-    
-    if not order:
-        return jsonify({"error": "Order not found"}), 404
-    
-    return jsonify({
-        "id": str(order.id),
-        "buyer_id": str(order.buyer_id),
-        "farmer_id": str(order.farmer_id),
-        "items": order.items,
-        "total_amount": float(order.total_amount),
-        "status": order.status,
-        "payment_status": order.payment_status,
-        "payment_method": order.payment_method,
-        "checkout_id": order.checkout_id,
-        "mpesa_receipt": order.mpesa_receipt,
-        "created_at": order.created_at.isoformat() if order.created_at else None,
-        "updated_at": order.updated_at.isoformat() if order.updated_at else None,
-        "farmer": {
-            "id": str(order.farmer.id),
-            "farm_name": order.farmer.farm_name,
-            "phone_number": order.farmer.phone_number,
-        } if order.farmer else None,
-    }), 200
 
 @orders_bp.route("/", methods=["GET"])
 @jwt_required()
 def get_orders():
-    """Get all orders for current user (buyer or farmer)"""
-    user_id = uuid.UUID(get_jwt_identity())
-    user = User.query.filter_by(id=str(user_id)).first()
-    
+    """Get user orders"""
+    user_id = get_jwt_identity()
+    user = User.query.filter_by(id=user_id).first()
+
     if not user:
         return jsonify({"error": "User not found"}), 404
-    
-    # Convert enum to string for comparison
-    user_role = user.role.value if hasattr(user.role, 'value') else str(user.role)
-    user_role_lower = user_role.lower() if user_role else user_role
-    
-    if user_role_lower == "buyer":
+
+    if user.role.value == "buyer":
         buyer = Buyer.query.filter_by(user_id=user_id).first()
-        if not buyer:
-            return jsonify({"error": "Buyer profile not found"}), 404
-        orders = Order.query.filter_by(buyer_id=buyer.id).order_by(Order.created_at.desc()).all()
-    elif user_role_lower == "farmer":
+        orders = (
+            Order.query
+            .filter_by(buyer_id=buyer.id)
+            .order_by(Order.created_at.desc())
+            .all()
+        )
+    elif user.role.value == "farmer":
         farmer = Farmer.query.filter_by(user_id=user_id).first()
-        if not farmer:
-            return jsonify({"error": "Farmer profile not found"}), 404
-        orders = Order.query.filter_by(farmer_id=farmer.id).order_by(Order.created_at.desc()).all()
+        orders = (
+            Order.query
+            .filter_by(farmer_id=farmer.id)
+            .order_by(Order.created_at.desc())
+            .all()
+        )
     else:
-        # Admin sees all orders
         orders = Order.query.order_by(Order.created_at.desc()).all()
-    
-    return jsonify([
-        {
-            "id": str(order.id),
-            "buyer_id": str(order.buyer_id),
-            "farmer_id": str(order.farmer_id),
-            "items": order.items,
-            "total_amount": float(order.total_amount),
-            "status": order.status,
-            "payment_status": order.payment_status,
-            "payment_method": order.payment_method,
-            "created_at": order.created_at.isoformat() if order.created_at else None,
-        }
-        for order in orders
-    ]), 200
+
+    return jsonify({"orders": [o.to_dict() for o in orders]}), 200
+
 
 @orders_bp.route("/stats", methods=["GET"])
 @jwt_required()
 def get_order_stats():
-    """Get order statistics for dashboard"""
-    user_id = uuid.UUID(get_jwt_identity())
-    user = User.query.filter_by(id=str(user_id)).first()
-    
+    """Get order statistics for a user"""
+    user_id = get_jwt_identity()
+    user = User.query.filter_by(id=user_id).first()
+
     if not user:
         return jsonify({"error": "User not found"}), 404
-    
-    # Convert enum to string for comparison
-    user_role = user.role.value if hasattr(user.role, 'value') else str(user.role)
-    user_role_lower = user_role.lower() if user_role else user_role
-    
-    if user_role_lower == "buyer":
+
+    if user.role.value == "buyer":
         buyer = Buyer.query.filter_by(user_id=user_id).first()
-        if not buyer:
-            return jsonify({"error": "Buyer profile not found"}), 404
-        
-        orders = Order.query.filter_by(buyer_id=buyer.id).all()
-        pending = sum(1 for o in orders if o.status == "pending")
-        paid = sum(1 for o in orders if o.payment_status == "paid")
-        delivered = sum(1 for o in orders if o.status == "delivered")
-        total_spent = sum(float(o.total_amount) for o in orders if o.payment_status == "paid")
-    elif user_role_lower == "farmer":
+        orders = Order.query.filter_by(buyer_id=buyer.id).all() if buyer else []
+    elif user.role.value == "farmer":
         farmer = Farmer.query.filter_by(user_id=user_id).first()
-        if not farmer:
-            return jsonify({"error": "Farmer profile not found"}), 404
-        
-        orders = Order.query.filter_by(farmer_id=farmer.id).all()
-        pending = sum(1 for o in orders if o.status == "pending")
-        paid = sum(1 for o in orders if o.payment_status == "paid")
-        delivered = sum(1 for o in orders if o.status == "delivered")
-        total_earned = sum(float(o.total_amount) for o in orders if o.payment_status == "paid")
-        total_spent = total_earned
+        orders = Order.query.filter_by(farmer_id=farmer.id).all() if farmer else []
     else:
-        # Admin stats
         orders = Order.query.all()
-        pending = sum(1 for o in orders if o.status == "pending")
-        paid = sum(1 for o in orders if o.payment_status == "paid")
-        delivered = sum(1 for o in orders if o.status == "delivered")
-        total_spent = sum(float(o.total_amount) for o in orders)
+
+    total_orders = len(orders)
+    total_spent = sum(
+        o.total_amount for o in orders if o.status in ["paid", "completed", "delivered"]
+    )
+
+    return jsonify({
+        "total_orders": total_orders,
+        "total_spent": total_spent,
+    }), 200
+
+
+@orders_bp.route("/<order_id>", methods=["GET"])
+@jwt_required()
+def get_order(order_id):
+    """Get order details"""
+    order_uuid = get_uuid(order_id)
+    if not order_uuid:
+        return jsonify({"error": "Invalid order ID format"}), 400
+
+    order = Order.query.get(order_uuid)
+    if not order:
+        return jsonify({"error": "Order not found"}), 404
+
+    return jsonify(order.to_dict()), 200
+
+
+@orders_bp.route("/<order_id>/status", methods=["PUT"])
+@jwt_required()
+def update_order_status(order_id):
+    """Update order status (farmer only)"""
+    order_uuid = get_uuid(order_id)
+    if not order_uuid:
+        return jsonify({"error": "Invalid order ID format"}), 400
+
+    user_id = get_jwt_identity()
+    user = User.query.filter_by(id=user_id).first()
+
+    if not user or user.role.value != "farmer":
+        return jsonify({"error": "Only farmers can update order status"}), 403
+
+    order = Order.query.get(order_uuid)
+    if not order:
+        return jsonify({"error": "Order not found"}), 404
+
+    farmer = Farmer.query.filter_by(user_id=user_id).first()
+    if str(order.farmer_id) != str(farmer.id) if farmer else True:
+        return jsonify({"error": "Not your order"}), 403
+
+    data = request.get_json()
+    new_status = data.get("status")
+
+    if not new_status:
+        return jsonify({"error": "Status is required"}), 400
+
+    order.status = new_status
+
+    # Notify buyer
+    create_notification(
+        user_id=order.buyer.user_id,
+        type="order_update",
+        title="Order Status Updated",
+        message=f"Your order status is now: {new_status}",
+        related_id=order.id,
+        related_type="order",
+    )
+
+    db.session.commit()
+    return jsonify({"message": "Order status updated", "order": order.to_dict()}), 200
+
+
+@orders_bp.route("/<order_id>/accept", methods=["PUT"])
+@jwt_required()
+def accept_order(order_id):
+    """Farmer accepts order"""
+    order_uuid = get_uuid(order_id)
+    if not order_uuid:
+        return jsonify({"error": "Invalid order ID format"}), 400
+
+    user_id = get_jwt_identity()
+    user = User.query.filter_by(id=user_id).first()
+
+    if not user or user.role.value != "farmer":
+        return jsonify({"error": "Only farmers can accept orders"}), 403
+
+    order = Order.query.get(order_uuid)
+    if not order:
+        return jsonify({"error": "Order not found"}), 404
+
+    farmer = Farmer.query.filter_by(user_id=user_id).first()
+    if str(order.farmer_id) != str(farmer.id) if farmer else True:
+        return jsonify({"error": "Not your order"}), 403
+
+    order.status = "accepted"
+
+    # Notify buyer
+    create_notification(
+        user_id=order.buyer.user_id,
+        type="order_update",
+        title="Order Accepted",
+        message=f"Your order has been accepted by the farmer",
+        related_id=order.id,
+        related_type="order",
+    )
+
+    db.session.commit()
+    return jsonify({"message": "Order accepted", "order": order.to_dict()}), 200
+
+
+@orders_bp.route("/<order_id>/confirm-payment", methods=["POST"])
+@jwt_required()
+def confirm_payment(order_id):
+    """Simulate payment confirmation (for demo without M-Pesa)"""
+    order_uuid = get_uuid(order_id)
+    if not order_uuid:
+        return jsonify({"error": "Invalid order ID format"}), 400
+
+    order = Order.query.get(order_uuid)
+    if not order:
+        return jsonify({"error": "Order not found"}), 404
+
+    order.payment_status = "paid"
+    order.status = "processing"
+
+    # Update escrow
+    if order.escrow:
+        order.escrow.status = "held"
+
+    # Mark animals as sold
+    for item in order.items:
+        animal = Animal.query.get(uuid.UUID(item["animal_id"]))
+        if animal:
+            animal.status = "sold"
+
+    db.session.commit()
+    return jsonify({"message": "Payment confirmed", "order": order.to_dict()}), 200
+
+
+@orders_bp.route("/<order_id>/confirm-delivery", methods=["POST"])
+@jwt_required()
+def confirm_delivery(order_id):
+    """Buyer confirms delivery - releases funds to farmer"""
+    order_uuid = get_uuid(order_id)
+    if not order_uuid:
+        return jsonify({"error": "Invalid order ID format"}), 400
+
+    user_id = get_jwt_identity()
+    user = User.query.filter_by(id=user_id).first()
+
+    order = Order.query.get(order_uuid)
+    if not order:
+        return jsonify({"error": "Order not found"}), 404
+
+    buyer = Buyer.query.filter_by(user_id=user_id).first()
+    if not buyer or str(order.buyer_id) != str(buyer.id):
+        return jsonify({"error": "Not your order"}), 403
+
+    order.status = "completed"
+
+    # Release escrow funds to farmer
+    if order.escrow:
+        order.escrow.status = "released"
+        farmer = Farmer.query.filter_by(id=str(order.farmer_id)).first()
+        if farmer:
+            farmer.wallet_balance += order.total_amount
+
+    # Notify farmer
+    create_notification(
+        user_id=order.farmer.user_id,
+        type="order_update",
+        title="Payment Released",
+        message=f"KES {order.total_amount} has been added to your wallet",
+        related_id=order.id,
+        related_type="order",
+    )
+
+    db.session.commit()
+    return jsonify({"message": "Delivery confirmed, funds released"}), 200
+
+
+@orders_bp.route("/poll-status/<order_id>", methods=["GET"])
+@jwt_required()
+def poll_order_status(order_id):
+    """Poll for order status updates"""
+    order_uuid = get_uuid(order_id)
+    if not order_uuid:
+        return jsonify({"error": "Invalid order ID format"}), 400
+    
+    order = Order.query.get(order_uuid)
+    if not order:
+        return jsonify({"error": "Order not found"}), 404
     
     return jsonify({
-        "pending": pending,
-        "paid": paid,
-        "delivered": delivered,
-        "total": len(orders),
-        "total_amount": total_spent
+        "order_id": str(order.id),
+        "status": order.status,
+        "payment_status": order.payment_status,
     }), 200

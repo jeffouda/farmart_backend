@@ -102,6 +102,7 @@ class Animal(db.Model, TimestampMixin):
     gender = db.Column(db.String(20))
     health_history = db.Column(db.Text)
     image_url = db.Column(db.String(255))
+    quantity = db.Column(db.Integer, default=1)
 
     def to_dict(self):
         return {
@@ -115,6 +116,7 @@ class Animal(db.Model, TimestampMixin):
             "gender": self.gender,
             "health_history": self.health_history,
             "image_url": self.image_url,
+            "quantity": self.quantity or 1,
             "farmer_name": self.owner.farm_name if self.owner else None,
             "farmer_id": str(self.owner.id) if self.owner else None,
             "location": self.owner.location if self.owner else None,

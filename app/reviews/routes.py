@@ -15,23 +15,18 @@ def get_my_reviews():
     """
     current_user_id_str = get_jwt_identity()
 
-    try:
-        current_user_id = uuid.UUID(current_user_id_str)
-    except ValueError:
-        return jsonify({"error": "Invalid user ID format"}), 400
-
-    farmer = Farmer.query.filter_by(user_id=current_user_id).first()
+    farmer = Farmer.query.filter_by(user_id=current_user_id_str).first()
     if not farmer:
         return jsonify({"message": "No farmer profile found for this user"}), 404
 
     reviews = (
         Review.query
-        .filter_by(target_id=current_user_id)
+        .filter_by(target_id=current_user_id_str)
         .order_by(Review.created_at.desc())
         .all()
     )
 
-    user = User.query.filter_by(id=str(current_user_id)).first()
+    user = User.query.filter_by(id=current_user_id_str).first()
 
     return jsonify({
         "farmer": {
@@ -51,11 +46,6 @@ def create_review():
     Create a review and automatically release escrow funds if rating is >= 4.
     """
     current_user_id_str = get_jwt_identity()
-
-    try:
-        current_user_id = uuid.UUID(current_user_id_str)
-    except ValueError:
-        return jsonify({"error": "Invalid user ID format"}), 400
 
     data = request.get_json()
     if not data:
@@ -78,7 +68,7 @@ def create_review():
     if not rating or not isinstance(rating, int) or rating < 1 or rating > 5:
         return jsonify({"error": "Rating must be an integer between 1 and 5"}), 400
 
-    buyer = Buyer.query.filter_by(user_id=current_user_id).first()
+    buyer = Buyer.query.filter_by(user_id=current_user_id_str).first()
     if not buyer:
         return jsonify({"message": "No buyer profile found for this user"}), 404
 
@@ -93,7 +83,7 @@ def create_review():
 
     if order.has_review:
         # Check if user wants to update existing review
-        existing_review = Review.query.filter_by(order_id=order.id, reviewer_id=current_user_id).first()
+        existing_review = Review.query.filter_by(order_id=order.id, reviewer_id=current_user_id_str).first()
         if existing_review:
             # Update existing review
             existing_review.rating = rating
@@ -113,7 +103,7 @@ def create_review():
     # Create the review
     review = Review(
         order_id=order.id,
-        reviewer_id=current_user_id,
+        reviewer_id=current_user_id_str,
         target_id=farmer.user_id,
         rating=rating,
         comment=comment,

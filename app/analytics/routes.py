@@ -22,12 +22,7 @@ def get_farmer_analytics():
     """
     current_user_id_str = get_jwt_identity()
 
-    try:
-        current_user_id = uuid.UUID(current_user_id_str)
-    except ValueError:
-        return jsonify({"error": "Invalid user ID format"}), 400
-
-    user = User.query.filter_by(id=str(current_user_id)).first()
+    user = User.query.filter_by(id=current_user_id_str).first()
     
     # Convert enum to string for comparison
     user_role = user.role.value if hasattr(user.role, 'value') else str(user.role)
@@ -36,7 +31,7 @@ def get_farmer_analytics():
     if not user or user_role_lower != "farmer":
         return jsonify({"error": "Only farmers can view analytics"}), 403
 
-    farmer = Farmer.query.filter_by(user_id=current_user_id).first()
+    farmer = Farmer.query.filter_by(user_id=current_user_id_str).first()
     if not farmer:
         return jsonify({"error": "Farmer profile not found"}), 404
 
@@ -52,7 +47,7 @@ def get_farmer_analytics():
     avg_order_value = total_revenue / total_orders if total_orders > 0 else 0
 
     # Get customer rating from reviews
-    user_reviews = Review.query.filter_by(target_id=current_user_id).all()
+    user_reviews = Review.query.filter_by(target_id=current_user_id_str).all()
     avg_rating = sum(r.rating for r in user_reviews) / len(user_reviews) if user_reviews else 0
     review_count = len(user_reviews)
 

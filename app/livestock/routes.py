@@ -149,10 +149,17 @@ def create_animal():
     gender = request.form.get("gender", "male")
     description = request.form.get("description")
     health_history = request.form.get("health_history")
+    quantity = int(request.form.get("quantity", 1))
 
     # Validate required fields
     if not species or not breed or not price:
         return jsonify({"error": "Species, breed, and price are required"}), 400
+
+    # Validate quantity
+    if quantity < 1:
+        quantity = 1
+    if quantity > 50:
+        return jsonify({"error": "Maximum quantity is 50 animals per listing"}), 400
 
     # Convert age to months if in years
     age_months = int(age) if age else None
@@ -195,7 +202,7 @@ def create_animal():
                 # Use local storage
                 image_url = save_local_image(image_file)
 
-    # Create new animal
+    # Create new animal with quantity
     animal = Animal(
         farmer_id=farmer.id,
         species=species,
@@ -207,6 +214,7 @@ def create_animal():
         gender=gender,
         health_history=health_history,
         image_url=image_url or "https://placehold.co/600x400?text=No+Image",
+        quantity=quantity,
     )
 
     db.session.add(animal)
@@ -214,8 +222,9 @@ def create_animal():
 
     return jsonify({
         "success": True,
-        "message": "Livestock created successfully",
+        "message": f"Successfully created livestock listing with {quantity} animal(s)",
         "animal": animal.to_dict(),
+        "quantity": quantity,
     }), 201
 
 
@@ -666,3 +675,69 @@ def delete_animal(animal_id):
     return jsonify({
         "message": "Animal deleted successfully",
     }), 200
+
+
+@livestock_bp.route("/<string:animal_id>/update-quantity", methods=["POST"])
+@jwt_required()
+def update_animal_quantity(animal_id):
+    """
+    Update the quantity of an animal listing.
+    Only the owner farmer can update quantity.
+    Supports increment and decrement operations.
+    """
+    user_id_str = get_jwt_identity()
+
+    try:
+        user_id_uuid = uuid.UUID(user_id_str)
+    except ValueError:
+        return jsonify({"error": "Invalid user ID format"}), 400
+
+    user = User.query.get(user_id_uuid)
+    if not user or user.role.value != "farmer":
+        return jsonify({"error": "Only farmers can update animal quantity"}), 403
+
+    farmer = Farmer.query.filter_by(user_id=user_id_uuid).first()
+    if not farmer:
+        return jsonify({"error": "Farmer profile not found"}), 404
+
+    animal = get_animal_by_id(animal_id)
+    if not animal:
+        return jsonify({"error": "Animal not found or access denied"}), 404
+
+    # Verify ownership
+    if animal.farmer_id != farmer.id:
+        return jsonify({"error": "Not authorized to update this animal"}), 403
+
+    data = request.get_json()
+    action = data.get("action", "decrement")
+    amount = int(data.get("amount", 1))
+
+    if action == "increment":
+        animal.quantity += amount
+        if animal.quantity > 50:
+            animal.quantity = 50
+            return jsonify({"message": "Maximum quantity is 50", "quantity": animal.quantity}), 400
+        db.session.commit()
+        return jsonify({
+            "message": f"Quantity increased by {amount}",
+            "quantity": animal.quantity,
+        }), 200
+    elif action == "decrement":
+        if animal.quantity <= amount:
+            # Set to sold if quantity goes to 0
+            animal.quantity = 0
+            animal.status = "sold"
+            db.session.commit()
+            return jsonify({
+                "message": "All animals sold - listing marked as sold",
+                "quantity": 0,
+                "status": "sold",
+            }), 200
+        animal.quantity -= amount
+        db.session.commit()
+        return jsonify({
+            "message": f"Quantity decreased by {amount}",
+            "quantity": animal.quantity,
+        }), 200
+    else:
+        return jsonify({"error": "Invalid action. Use 'increment' or 'decrement'"}), 400
