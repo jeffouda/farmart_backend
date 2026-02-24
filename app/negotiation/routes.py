@@ -60,14 +60,17 @@ def get_conversation(livestock_id):
 
 
 # Send a message about livestock
-@negotiation_bp.route("/<string:livestock_id>", methods=["POST"])
-@negotiation_bp.route("/<string:livestock_id>/", methods=["POST"])
-@jwt_required()
+@negotiation_bp.route("/<string:livestock_id>", methods=["POST", "OPTIONS"])
+@negotiation_bp.route("/<string:livestock_id>/", methods=["POST", "OPTIONS"])
+@jwt_required(optional=True)
 def send_message(livestock_id):
     """
     Send a message about a livestock item.
     Requires: receiver_id and content in request body.
     """
+    if request.method == "OPTIONS":
+        return jsonify({"status": "ok"}), 200
+    
     user_id_str = get_jwt_identity()
 
     user = User.query.filter_by(id=user_id_str).first()
