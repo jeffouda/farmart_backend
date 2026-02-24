@@ -11,16 +11,25 @@ import uuid
 # Get messages and send messages for a livestock
 @negotiation_bp.route("/<string:livestock_id>", methods=["GET", "POST", "OPTIONS"])
 @negotiation_bp.route("/<string:livestock_id>/", methods=["GET", "POST", "OPTIONS"])
-@jwt_required(optional=True)
 def livestock_conversation(livestock_id):
     """
     GET: Get all messages for a specific livestock.
     POST: Send a message about a livestock item.
     """
+    print(f"🔍 Negotiation route called: {request.method} /negotiation/{livestock_id}")
+    
     if request.method == "OPTIONS":
         return jsonify({"status": "ok"}), 200
     
-    user_id_str = get_jwt_identity()
+    # Get JWT token
+    from flask_jwt_extended import verify_jwt_in_request, get_jwt_identity
+    try:
+        verify_jwt_in_request(optional=True)
+        user_id_str = get_jwt_identity()
+    except Exception as e:
+        print(f"❌ JWT Error: {e}")
+        user_id_str = None
+    
     if not user_id_str:
         return jsonify({"error": "Authentication required"}), 401
 
