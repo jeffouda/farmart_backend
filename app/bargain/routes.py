@@ -16,9 +16,13 @@ import uuid
 
 
 # Start a new bargain session (Buyer makes initial offer)
-@bargain_bp.route("/sessions", methods=["POST"])
-@jwt_required()
+@bargain_bp.route("/sessions", methods=["POST", "OPTIONS"])
+@jwt_required(optional=True)
 def create_session():
+    # Handle OPTIONS preflight
+    if request.method == "OPTIONS":
+        return jsonify({"status": "ok"}), 200
+    
     data = request.get_json()
 
     # Get current user from JWT
@@ -126,9 +130,13 @@ def create_session():
 
 
 # Get all bargain sessions for current user
-@bargain_bp.route("/sessions", methods=["GET"])
-@jwt_required()
+@bargain_bp.route("/sessions", methods=["GET", "OPTIONS"])
+@jwt_required(optional=True)
 def get_sessions():
+    # Handle OPTIONS preflight
+    if request.method == "OPTIONS":
+        return jsonify({"status": "ok"}), 200
+    
     user_id_str = get_jwt_identity()
     try:
         user_id_uuid = uuid.UUID(user_id_str)
