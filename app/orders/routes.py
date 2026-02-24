@@ -89,17 +89,17 @@ def create_order():
         db.session.add(order)
         db.session.flush()
 
-        # Mark animals as pending and decrement quantity
+        # Decrement quantity but keep as available if stock remains
         for item in order_items:
             animal = Animal.query.filter_by(id=item["animal_id"]).first()
             if animal:
                 quantity_ordered = item.get("quantity", 1)
                 if animal.quantity >= quantity_ordered:
                     animal.quantity -= quantity_ordered
+                    # Only mark as sold when quantity reaches 0
                     if animal.quantity == 0:
                         animal.status = "sold"
-                    else:
-                        animal.status = "pending"  # Temporarily pending during checkout
+                    # Keep as available if stock remains
 
         # Create escrow record
         farmer = Farmer.query.filter_by(id=farmer_id).first()
