@@ -32,7 +32,12 @@ def create_order():
     user_id = get_jwt_identity()
     user = User.query.filter_by(id=user_id).first()
 
-    if not user or user.role.value != "buyer":
+    if not user:
+        return jsonify({"error": "User not found"}), 404
+
+    # Convert enum to string for comparison
+    user_role = user.role.value if hasattr(user.role, 'value') else str(user.role)
+    if user_role.upper() != "BUYER":
         return jsonify({"error": "Only buyers can create orders"}), 403
 
     buyer = Buyer.query.filter_by(user_id=user_id).first()
@@ -133,7 +138,9 @@ def get_orders():
     if not user:
         return jsonify({"error": "User not found"}), 404
 
-    if user.role.value == "buyer":
+    user_role = user.role.value if hasattr(user.role, 'value') else str(user.role)
+    
+    if user_role.upper() == "BUYER":
         buyer = Buyer.query.filter_by(user_id=user_id).first()
         orders = (
             Order.query
@@ -141,7 +148,7 @@ def get_orders():
             .order_by(Order.created_at.desc())
             .all()
         )
-    elif user.role.value == "farmer":
+    elif user_role.upper() == "FARMER":
         farmer = Farmer.query.filter_by(user_id=user_id).first()
         orders = (
             Order.query
@@ -165,10 +172,12 @@ def get_order_stats():
     if not user:
         return jsonify({"error": "User not found"}), 404
 
-    if user.role.value == "buyer":
+    user_role = user.role.value if hasattr(user.role, 'value') else str(user.role)
+    
+    if user_role.upper() == "BUYER":
         buyer = Buyer.query.filter_by(user_id=user_id).first()
         orders = Order.query.filter_by(buyer_id=buyer.id).all() if buyer else []
-    elif user.role.value == "farmer":
+    elif user_role.upper() == "FARMER":
         farmer = Farmer.query.filter_by(user_id=user_id).first()
         orders = Order.query.filter_by(farmer_id=farmer.id).all() if farmer else []
     else:
@@ -211,7 +220,8 @@ def update_order_status(order_id):
     user_id = get_jwt_identity()
     user = User.query.filter_by(id=user_id).first()
 
-    if not user or user.role.value != "farmer":
+    user_role = user.role.value if hasattr(user.role, 'value') else str(user.role)
+    if not user or user_role.upper() != "FARMER":
         return jsonify({"error": "Only farmers can update order status"}), 403
 
     order = Order.query.get(order_uuid)
@@ -255,7 +265,8 @@ def accept_order(order_id):
     user_id = get_jwt_identity()
     user = User.query.filter_by(id=user_id).first()
 
-    if not user or user.role.value != "farmer":
+    user_role = user.role.value if hasattr(user.role, 'value') else str(user.role)
+    if not user or user_role.upper() != "FARMER":
         return jsonify({"error": "Only farmers can accept orders"}), 403
 
     order = Order.query.get(order_uuid)
