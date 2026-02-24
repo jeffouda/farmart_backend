@@ -67,12 +67,7 @@ def get_inventory_stats():
     """
     user_id_str = get_jwt_identity()
 
-    try:
-        user_id_uuid = uuid.UUID(user_id_str)
-    except ValueError:
-        return jsonify({"error": "Invalid user ID format"}), 400
-
-    user = User.query.filter_by(id=str(user_id_uuid)).first()
+    user = User.query.filter_by(id=user_id_str).first()
     if not user:
         return jsonify({"error": "User not found"}), 404
 
@@ -84,7 +79,7 @@ def get_inventory_stats():
     if user_role_lower != "farmer":
         return jsonify({"error": "Only farmers can view inventory stats"}), 403
 
-    farmer = Farmer.query.filter_by(user_id=user_id_uuid).first()
+    farmer = Farmer.query.filter_by(user_id=user_id_str).first()
     if not farmer:
         return jsonify({"error": "Farmer profile not found"}), 404
 
@@ -117,15 +112,14 @@ def create_animal():
     Only accessible by farmers.
     """
     user_id_str = get_jwt_identity()
+    print(f"🔍 JWT Identity: {user_id_str} (type: {type(user_id_str)})")
 
-    try:
-        user_id_uuid = uuid.UUID(user_id_str)
-    except ValueError:
-        return jsonify({"error": "Invalid user ID format"}), 400
-
-    user = User.query.filter_by(id=str(user_id_uuid)).first()
+    # Query user directly with string ID
+    user = User.query.filter_by(id=user_id_str).first()
     if not user:
         return jsonify({"error": "User not found"}), 404
+
+    print(f"✅ User found: {user.email}, Role: {user.role}")
 
     # Convert enum to string for comparison
     user_role = user.role.value if hasattr(user.role, 'value') else str(user.role)
@@ -135,9 +129,13 @@ def create_animal():
     if user_role_lower != "farmer":
         return jsonify({"error": "Only farmers can create livestock listings"}), 403
 
-    farmer = Farmer.query.filter_by(user_id=user_id_uuid).first()
+    # Query farmer using string user_id (handles both UUID and string formats)
+    farmer = Farmer.query.filter_by(user_id=user_id_str).first()
     if not farmer:
+        print(f"❌ Farmer profile not found for user_id: {user_id_str}")
         return jsonify({"error": "Farmer profile not found"}), 404
+    
+    print(f"✅ Farmer found: {farmer.farm_name}")
 
     # Get form data
     species = request.form.get("species")
@@ -237,12 +235,7 @@ def seed_test_animal():
     """
     user_id_str = get_jwt_identity()
 
-    try:
-        user_id_uuid = uuid.UUID(user_id_str)
-    except ValueError:
-        return jsonify({"error": "Invalid user ID format"}), 400
-
-    user = User.query.filter_by(id=str(user_id_uuid)).first()
+    user = User.query.filter_by(id=user_id_str).first()
     if not user:
         return jsonify({"error": "User not found"}), 404
 
@@ -254,7 +247,7 @@ def seed_test_animal():
     if user_role_lower != "farmer":
         return jsonify({"error": "Only farmers can create test animals"}), 403
 
-    farmer = Farmer.query.filter_by(user_id=user_id_uuid).first()
+    farmer = Farmer.query.filter_by(user_id=user_id_str).first()
     if not farmer:
         return jsonify({"error": "Farmer profile not found"}), 404
 
@@ -339,9 +332,8 @@ def list_animals():
 @jwt_required()
 def get_my_inventory():
     user_id_str = get_jwt_identity()
-    user_id_uuid = uuid.UUID(user_id_str)
     
-    farmer = Farmer.query.filter_by(user_id=user_id_uuid).first()
+    farmer = Farmer.query.filter_by(user_id=user_id_str).first()
     if not farmer:
         return jsonify({"error": "Farmer profile not found"}), 404
 
@@ -590,12 +582,7 @@ def update_animal(animal_id):
     """
     user_id_str = get_jwt_identity()
 
-    try:
-        user_id_uuid = uuid.UUID(user_id_str)
-    except ValueError:
-        return jsonify({"error": "Invalid user ID format"}), 400
-
-    user = User.query.filter_by(id=str(user_id_uuid)).first()
+    user = User.query.filter_by(id=user_id_str).first()
     
     # Convert enum to string for comparison
     user_role = user.role.value if hasattr(user.role, 'value') else str(user.role)
@@ -604,7 +591,7 @@ def update_animal(animal_id):
     if not user or user_role_lower != "farmer":
         return jsonify({"error": "Only farmers can update animals"}), 403
 
-    farmer = Farmer.query.filter_by(user_id=user_id_uuid).first()
+    farmer = Farmer.query.filter_by(user_id=user_id_str).first()
     if not farmer:
         return jsonify({"error": "Farmer profile not found"}), 404
 
@@ -643,12 +630,7 @@ def delete_animal(animal_id):
     """
     user_id_str = get_jwt_identity()
 
-    try:
-        user_id_uuid = uuid.UUID(user_id_str)
-    except ValueError:
-        return jsonify({"error": "Invalid user ID format"}), 400
-
-    user = User.query.filter_by(id=str(user_id_uuid)).first()
+    user = User.query.filter_by(id=user_id_str).first()
     
     # Convert enum to string for comparison
     user_role = user.role.value if hasattr(user.role, 'value') else str(user.role)
@@ -657,7 +639,7 @@ def delete_animal(animal_id):
     if not user or user_role_lower != "farmer":
         return jsonify({"error": "Only farmers can delete animals"}), 403
 
-    farmer = Farmer.query.filter_by(user_id=user_id_uuid).first()
+    farmer = Farmer.query.filter_by(user_id=user_id_str).first()
     if not farmer:
         return jsonify({"error": "Farmer profile not found"}), 404
 
@@ -687,16 +669,11 @@ def update_animal_quantity(animal_id):
     """
     user_id_str = get_jwt_identity()
 
-    try:
-        user_id_uuid = uuid.UUID(user_id_str)
-    except ValueError:
-        return jsonify({"error": "Invalid user ID format"}), 400
-
-    user = User.query.get(user_id_uuid)
-    if not user or user.role.value != "farmer":
+    user = User.query.filter_by(id=user_id_str).first()
+    if not user or user.role.value != "FARMER":
         return jsonify({"error": "Only farmers can update animal quantity"}), 403
 
-    farmer = Farmer.query.filter_by(user_id=user_id_uuid).first()
+    farmer = Farmer.query.filter_by(user_id=user_id_str).first()
     if not farmer:
         return jsonify({"error": "Farmer profile not found"}), 404
 
