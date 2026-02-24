@@ -8,114 +8,98 @@ from . import negotiation_bp
 import uuid
 
 
-# Get all messages for a livestock (conversation view)
-@negotiation_bp.route("/<string:livestock_id>", methods=["GET"])
-@negotiation_bp.route("/<string:livestock_id>/", methods=["GET"])
-@jwt_required()
-def get_conversation(livestock_id):
-    """
-    Get all messages for a specific livestock.
-    Users can only see messages they sent or received.
-    """
-    user_id_str = get_jwt_identity()
-
-    user = User.query.filter_by(id=user_id_str).first()
-    if not user:
-        return jsonify({"error": "User not found"}), 404
-
-    # Verify livestock exists
-    animal = Animal.query.filter_by(id=livestock_id).first()
-    if not animal:
-        return jsonify({"error": "Livestock not found"}), 404
-
-    # Get messages where user is sender or receiver
-    messages = (
-        Message.query
-        .filter(
-            Message.livestock_id == livestock_id,
-            (
-                (Message.sender_id == user_id_str)
-                | (Message.receiver_id == user_id_str)
-            ),
-        )
-        .order_by(Message.created_at.asc())
-        .all()
-    )
-
-    # Get farmer info for the livestock
-    farmer = Farmer.query.get(animal.farmer_id)
-    farmer_name = farmer.user.full_name if farmer and farmer.user else "Unknown Farmer"
-
-    return jsonify({
-        "livestock_id": str(livestock_id),
-        "livestock": {
-            "species": animal.species,
-            "breed": animal.breed,
-            "image_url": animal.image_url,
-        },
-        "farmer_name": farmer_name,
-        "messages": [msg.to_dict() for msg in messages],
-        "count": len(messages),
-    }), 200
-
-
-# Send a message about livestock
-@negotiation_bp.route("/<string:livestock_id>", methods=["POST", "OPTIONS"])
-@negotiation_bp.route("/<string:livestock_id>/", methods=["POST", "OPTIONS"])
+# Get messages and send messages for a livestock
+@negotiation_bp.route("/<string:livestock_id>", methods=["GET", "POST", "OPTIONS"])
+@negotiation_bp.route("/<string:livestock_id>/", methods=["GET", "POST", "OPTIONS"])
 @jwt_required(optional=True)
-def send_message(livestock_id):
+def livestock_conversation(livestock_id):
     """
-    Send a message about a livestock item.
-    Requires: receiver_id and content in request body.
+    GET: Get all messages for a specific livestock.
+    POST: Send a message about a livestock item.
     """
     if request.method == "OPTIONS":
         return jsonify({"status": "ok"}), 200
     
     user_id_str = get_jwt_identity()
+    if not user_id_str:
+        return jsonify({"error": "Authentication required"}), 401
 
     user = User.query.filter_by(id=user_id_str).first()
     if not user:
         return jsonify({"error": "User not found"}), 404
-
-    data = request.get_json()
-
-    # Validate required fields
-    if not data.get("content"):
-        return jsonify({"error": "Message content is required"}), 400
-
-    receiver_id = data.get("receiver_id")
-    if not receiver_id:
-        return jsonify({"error": "Receiver ID is required"}), 400
 
     # Verify livestock exists
     animal = Animal.query.filter_by(id=livestock_id).first()
     if not animal:
         return jsonify({"error": "Livestock not found"}), 404
 
-    # Verify receiver exists
-    receiver = User.query.filter_by(id=receiver_id).first()
-    if not receiver:
-        return jsonify({"error": "Receiver not found"}), 404
+    if request.method == "GET":
+        # Get messages where user is sender or receiver
+        messages = (
+            Message.query
+            .filter(
+                Message.livestock_id == livestock_id,
+                (
+                    (Message.sender_id == user_id_str)
+                    | (Message.receiver_id == user_id_str)
+                ),
+            )
+            .order_by(Message.created_at.asc())
+            .all()
+        )
 
-    # Create message
-    message = Message(
-        sender_id=user_id_str,
-        receiver_id=receiver_id,
-        livestock_id=livestock_id,
-        content=data["content"],
-    )
+        # Get farmer info for the livestock
+        farmer = Farmer.query.get(animal.farmer_id)
+        farmer_name = farmer.user.full_name if farmer and farmer.user else "Unknown Farmer"
 
-    db.session.add(message)
-
-    try:
-        db.session.commit()
         return jsonify({
-            "message": "Message sent successfully",
-            "data": message.to_dict(),
-        }), 201
-    except Exception as e:
-        db.session.rollback()
-        return jsonify({"error": str(e)}), 500
+            "livestock_id": str(livestock_id),
+            "livestock": {
+                "species": animal.species,
+                "breed": animal.breed,
+                "image_url": animal.image_url,
+                "price": float(animal.price) if animal.price else 0,
+            },
+            "farmer_name": farmer_name,
+            "messages": [msg.to_dict() for msg in messages],
+            "count": len(messages),
+        }), 200
+
+    elif request.method == "POST":
+        data = request.get_json()
+
+        # Validate required fields
+        if not data.get("content"):
+            return jsonify({"error": "Message content is required"}), 400
+
+        receiver_id = data.get("receiver_id")
+        if not receiver_id:
+            return jsonify({"error": "Receiver ID is required"}), 400
+
+        # Verify receiver exists
+        receiver = User.query.filter_by(id=receiver_id).first()
+        if not receiver:
+            return jsonify({"error": "Receiver not found"}), 404
+
+        # Create message
+        message = Message(
+            sender_id=user_id_str,
+            receiver_id=receiver_id,
+            livestock_id=livestock_id,
+            content=data["content"],
+        )
+
+        db.session.add(message)
+
+        try:
+            db.session.commit()
+            return jsonify({
+                "message": "Message sent successfully",
+                "data": message.to_dict(),
+            }), 201
+        except Exception as e:
+            db.session.rollback()
+            return jsonify({"error": str(e)}), 500
 
 
 # Get all conversations for current user
