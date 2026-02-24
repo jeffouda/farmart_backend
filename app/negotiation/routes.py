@@ -11,8 +11,8 @@ import uuid
 
 
 # Get all messages for a livestock (conversation view)
-@negotiation_bp.route("/<uuid:livestock_id>", methods=["GET"])
-@negotiation_bp.route("/<uuid:livestock_id>/", methods=["GET"])
+@negotiation_bp.route("/<string:livestock_id>", methods=["GET"])
+@negotiation_bp.route("/<string:livestock_id>/", methods=["GET"])
 @jwt_required()
 def get_conversation(livestock_id):
     """
@@ -20,17 +20,13 @@ def get_conversation(livestock_id):
     Users can only see messages they sent or received.
     """
     user_id_str = get_jwt_identity()
-    try:
-        user_id_uuid = uuid.UUID(user_id_str)
-    except ValueError:
-        return jsonify({"error": "Invalid user ID format"}), 400
 
-    user = User.query.filter_by(id=str(user_id_uuid)).first()
+    user = User.query.filter_by(id=user_id_str).first()
     if not user:
         return jsonify({"error": "User not found"}), 404
 
     # Verify livestock exists
-    animal = Animal.query.get(livestock_id)
+    animal = Animal.query.filter_by(id=livestock_id).first()
     if not animal:
         return jsonify({"error": "Livestock not found"}), 404
 
@@ -40,8 +36,8 @@ def get_conversation(livestock_id):
         .filter(
             Message.livestock_id == livestock_id,
             (
-                (Message.sender_id == user_id_uuid)
-                | (Message.receiver_id == user_id_uuid)
+                (Message.sender_id == user_id_str)
+                | (Message.receiver_id == user_id_str)
             ),
         )
         .order_by(Message.created_at.asc())
