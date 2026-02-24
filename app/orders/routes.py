@@ -194,23 +194,50 @@ def get_order_stats():
     }), 200
 
 
-@orders_bp.route("/<order_id>", methods=["GET", "OPTIONS"])
+@orders_bp.route("/<order_id>", methods=["GET", "PUT", "OPTIONS"])
 @jwt_required(optional=True)
-def get_order(order_id):
-    """Get order details"""
+def get_or_update_order(order_id):
+    """Get or update order details"""
     # Handle OPTIONS preflight
     if request.method == "OPTIONS":
         return jsonify({"status": "ok"}), 200
     
-    try:
-        order = Order.query.filter_by(id=order_id).first()
-        if not order:
-            return jsonify({"error": "Order not found"}), 404
+    if request.method == "GET":
+        try:
+            order = Order.query.filter_by(id=order_id).first()
+            if not order:
+                return jsonify({"error": "Order not found"}), 404
 
-        return jsonify(order.to_dict()), 200
-    except Exception as e:
-        print(f"Get order error: {e}")
-        return jsonify({"error": "Internal server error"}), 500
+            return jsonify(order.to_dict()), 200
+        except Exception as e:
+            print(f"Get order error: {e}")
+            return jsonify({"error": "Internal server error"}), 500
+    
+    elif request.method == "PUT":
+        # Update order (for checkout flow)
+        try:
+            order = Order.query.filter_by(id=order_id).first()
+            if not order:
+                return jsonify({"error": "Order not found"}), 404
+            
+            data = request.get_json()
+            
+            # Update allowed fields
+            if "payment_method" in data:
+                order.payment_method = data["payment_method"]
+            if "phone_number" in data:
+                order.phone_number = data["phone_number"]
+            if "shipping_address" in data:
+                order.shipping_address = data["shipping_address"]
+            if "total_amount" in data:
+                order.total_amount = data["total_amount"]
+            
+            db.session.commit()
+            return jsonify({"message": "Order updated", "order": order.to_dict()}), 200
+        except Exception as e:
+            db.session.rollback()
+            print(f"Update order error: {e}")
+            return jsonify({"error": "Internal server error"}), 500
 
 
 @orders_bp.route("/<order_id>/status", methods=["PUT"])
