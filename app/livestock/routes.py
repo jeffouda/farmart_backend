@@ -599,26 +599,45 @@ def update_animal(animal_id):
     if not user_id_str:
         return jsonify({"error": "Authentication required"}), 401
 
+    print(f"🔍 UPDATE LIVESTOCK - User ID from JWT: {user_id_str}")
+    
     user = User.query.filter_by(id=user_id_str).first()
+    if not user:
+        print(f"❌ User not found: {user_id_str}")
+        return jsonify({"error": "User not found"}), 404
+    
+    print(f"✅ User found: {user.email}, Role: {user.role}")
     
     # Convert enum to string for comparison
     user_role = user.role.value if hasattr(user.role, 'value') else str(user.role)
     user_role_lower = user_role.lower() if user_role else user_role
     
+    print(f"🔍 User role check: {user_role_lower}")
+    
     if not user or user_role_lower != "farmer":
+        print(f"❌ Not a farmer: {user_role_lower}")
         return jsonify({"error": "Only farmers can update animals"}), 403
 
     farmer = Farmer.query.filter_by(user_id=user_id_str).first()
     if not farmer:
+        print(f"❌ Farmer profile not found for user_id: {user_id_str}")
         return jsonify({"error": "Farmer profile not found"}), 404
+    
+    print(f"✅ Farmer found: {farmer.id}")
 
     animal = get_animal_by_id(animal_id)
     if not animal:
+        print(f"❌ Animal not found: {animal_id}")
         return jsonify({"error": "Animal not found or access denied"}), 404
 
+    print(f"🔍 Animal farmer_id: {animal.farmer_id}, Current farmer.id: {farmer.id}")
+    
     # Verify ownership
-    if animal.farmer_id != farmer.id:
+    if str(animal.farmer_id) != str(farmer.id):
+        print(f"❌ Ownership mismatch: animal.farmer_id={animal.farmer_id}, farmer.id={farmer.id}")
         return jsonify({"error": "Not authorized to update this animal"}), 403
+    
+    print(f"✅ Ownership verified")
 
     data = request.get_json()
 
