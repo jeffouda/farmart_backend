@@ -582,17 +582,22 @@ def get_animal(animal_id):
 
 
 @livestock_bp.route("/<string:animal_id>", methods=["PUT", "OPTIONS"])
-@jwt_required(optional=True)
 def update_animal(animal_id):
     """
     Update an animal's details.
     Only the owner farmer can update their animal.
     """
-    # Handle OPTIONS preflight
+    # Handle OPTIONS preflight WITHOUT authentication
     if request.method == "OPTIONS":
         return jsonify({"status": "ok"}), 200
     
+    # Require JWT for PUT requests
+    from flask_jwt_extended import verify_jwt_in_request
+    verify_jwt_in_request()
+    
     user_id_str = get_jwt_identity()
+    if not user_id_str:
+        return jsonify({"error": "Authentication required"}), 401
 
     user = User.query.filter_by(id=user_id_str).first()
     
