@@ -62,8 +62,8 @@ def get_conversation(livestock_id):
 
 
 # Send a message about livestock
-@negotiation_bp.route("/<uuid:livestock_id>", methods=["POST"])
-@negotiation_bp.route("/<uuid:livestock_id>/", methods=["POST"])
+@negotiation_bp.route("/<string:livestock_id>", methods=["POST"])
+@negotiation_bp.route("/<string:livestock_id>/", methods=["POST"])
 @jwt_required()
 def send_message(livestock_id):
     """
@@ -71,12 +71,8 @@ def send_message(livestock_id):
     Requires: receiver_id and content in request body.
     """
     user_id_str = get_jwt_identity()
-    try:
-        user_id_uuid = uuid.UUID(user_id_str)
-    except ValueError:
-        return jsonify({"error": "Invalid user ID format"}), 400
 
-    user = User.query.filter_by(id=str(user_id_uuid)).first()
+    user = User.query.filter_by(id=user_id_str).first()
     if not user:
         return jsonify({"error": "User not found"}), 404
 
@@ -91,24 +87,19 @@ def send_message(livestock_id):
         return jsonify({"error": "Receiver ID is required"}), 400
 
     # Verify livestock exists
-    animal = Animal.query.get(livestock_id)
+    animal = Animal.query.filter_by(id=livestock_id).first()
     if not animal:
         return jsonify({"error": "Livestock not found"}), 404
 
     # Verify receiver exists
-    try:
-        receiver_uuid = uuid.UUID(receiver_id)
-    except ValueError:
-        return jsonify({"error": "Invalid receiver ID format"}), 400
-
-    receiver = User.query.filter_by(id=str(receiver_uuid)).first()
+    receiver = User.query.filter_by(id=receiver_id).first()
     if not receiver:
         return jsonify({"error": "Receiver not found"}), 404
 
     # Create message
     message = Message(
-        sender_id=user_id_uuid,
-        receiver_id=receiver_uuid,
+        sender_id=user_id_str,
+        receiver_id=receiver_id,
         livestock_id=livestock_id,
         content=data["content"],
     )
@@ -136,12 +127,8 @@ def get_conversations():
     Returns unique conversations grouped by livestock.
     """
     user_id_str = get_jwt_identity()
-    try:
-        user_id_uuid = uuid.UUID(user_id_str)
-    except ValueError:
-        return jsonify({"error": "Invalid user ID format"}), 400
 
-    user = User.query.filter_by(id=str(user_id_uuid)).first()
+    user = User.query.filter_by(id=user_id_str).first()
     if not user:
         return jsonify({"error": "User not found"}), 404
 
@@ -149,14 +136,14 @@ def get_conversations():
     sent_livestock = (
         db.session
         .query(Message.livestock_id)
-        .filter(Message.sender_id == user_id_uuid)
+        .filter(Message.sender_id == user_id_str)
         .distinct()
         .all()
     )
     received_livestock = (
         db.session
         .query(Message.livestock_id)
-        .filter(Message.receiver_id == user_id_uuid)
+        .filter(Message.receiver_id == user_id_str)
         .distinct()
         .all()
     )
@@ -168,21 +155,21 @@ def get_conversations():
         livestock_ids.add(row[0])
 
     conversations = []
-    for livestock_uuid in livestock_ids:
+    for livestock_id in livestock_ids:
         # Get the latest message for this livestock
         latest_message = (
             Message.query
-            .filter(Message.livestock_id == livestock_uuid)
+            .filter(Message.livestock_id == livestock_id)
             .order_by(Message.created_at.desc())
             .first()
         )
 
         if latest_message:
-            animal = Animal.query.get(livestock_uuid)
+            animal = Animal.query.filter_by(id=livestock_id).first()
             farmer = Farmer.query.get(animal.farmer_id) if animal else None
 
             # Determine the other party
-            if latest_message.sender_id == user_id_uuid:
+            if latest_message.sender_id == user_id_str:
                 other_user = latest_message.receiver
                 other_name = other_user.full_name if other_user else "Unknown"
             else:
@@ -191,13 +178,13 @@ def get_conversations():
 
             # Count unread messages
             unread_count = Message.query.filter(
-                Message.livestock_id == livestock_uuid,
-                Message.receiver_id == user_id_uuid,
+                Message.livestock_id == livestock_id,
+                Message.receiver_id == user_id_str,
                 Message.is_read == False,
             ).count()
 
             conversations.append({
-                "livestock_id": str(livestock_uuid),
+                "livestock_id": str(livestock_id),
                 "livestock": {
                     "species": animal.species if animal else None,
                     "breed": animal.breed if animal else None,
@@ -223,23 +210,19 @@ def get_conversations():
 
 
 # Mark messages as read
-@negotiation_bp.route("/<uuid:livestock_id>/read", methods=["POST"])
-@negotiation_bp.route("/<uuid:livestock_id>/read/", methods=["POST"])
+@negotiation_bp.route("/<string:livestock_id>/read", methods=["POST"])
+@negotiation_bp.route("/<string:livestock_id>/read/", methods=["POST"])
 @jwt_required()
 def mark_as_read(livestock_id):
     """
     Mark all messages for a livestock as read.
     """
     user_id_str = get_jwt_identity()
-    try:
-        user_id_uuid = uuid.UUID(user_id_str)
-    except ValueError:
-        return jsonify({"error": "Invalid user ID format"}), 400
 
     # Update unread messages
     Message.query.filter(
         Message.livestock_id == livestock_id,
-        Message.receiver_id == user_id_uuid,
+        Message.receiver_id == user_id_str,
         Message.is_read == False,
     ).update({"is_read": True})
 
@@ -259,17 +242,13 @@ def delete_message(message_id):
     Delete a message (only the sender can delete).
     """
     user_id_str = get_jwt_identity()
-    try:
-        user_id_uuid = uuid.UUID(user_id_str)
-    except ValueError:
-        return jsonify({"error": "Invalid user ID format"}), 400
 
     message = Message.query.get(message_id)
     if not message:
         return jsonify({"error": "Message not found"}), 404
 
     # Only sender can delete
-    if message.sender_id != user_id_uuid:
+    if message.sender_id != user_id_str:
         return jsonify({"error": "You can only delete your own messages"}), 403
 
     try:
