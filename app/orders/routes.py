@@ -194,10 +194,14 @@ def get_order_stats():
     }), 200
 
 
-@orders_bp.route("/<order_id>", methods=["GET"])
-@jwt_required()
+@orders_bp.route("/<order_id>", methods=["GET", "OPTIONS"])
+@jwt_required(optional=True)
 def get_order(order_id):
     """Get order details"""
+    # Handle OPTIONS preflight
+    if request.method == "OPTIONS":
+        return jsonify({"status": "ok"}), 200
+    
     try:
         order = Order.query.filter_by(id=order_id).first()
         if not order:
