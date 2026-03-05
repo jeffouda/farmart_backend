@@ -26,7 +26,7 @@ def get_notifications():
     verify_jwt_in_request()
 
     try:
-        user_id = get_uuid(get_jwt_identity())
+        user_id = get_jwt_identity()  # Use string ID directly
         
         if not user_id:
             return jsonify({'error': 'Invalid user ID'}), 400
@@ -36,7 +36,7 @@ def get_notifications():
         per_page = request.args.get('per_page', 20, type=int)
         unread_only = request.args.get('unread_only', False, type=bool)
         
-        # Build query - use UUID for filtering
+        # Build query - use string user_id
         query = Notification.query.filter_by(user_id=user_id)
         
         if unread_only:
@@ -73,7 +73,7 @@ def get_unread_count():
     verify_jwt_in_request()
 
     try:
-        user_id = get_uuid(get_jwt_identity())
+        user_id = get_jwt_identity()  # Use string ID directly
         
         if not user_id:
             return jsonify({'error': 'Invalid user ID'}), 400

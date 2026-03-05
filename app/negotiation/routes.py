@@ -2,7 +2,7 @@ from flask import request, jsonify
 from flask_jwt_extended import jwt_required, get_jwt_identity
 from app import db
 
-from app.models import User, Farmer, Animal, Message
+from app.models import User, Farmer, Animal, Message, Notification
 from datetime import datetime
 from . import negotiation_bp
 import uuid
@@ -75,22 +75,37 @@ def livestock_conversation(livestock_id):
         }), 200
 
     elif request.method == "POST":
+        print(f"📨 POST request received for livestock {livestock_id}")
         data = request.get_json()
+        print(f"📦 Request data: {data}")
 
         # Validate required fields
-        if not data.get("content"):
+        if not data or not data.get("content"):
+            print(f"❌ Missing content field")
             return jsonify({"error": "Message content is required"}), 400
 
         receiver_id = data.get("receiver_id")
         if not receiver_id:
+            print(f"❌ Missing receiver_id field")
             return jsonify({"error": "Receiver ID is required"}), 400
+        
+        print(f"✅ Validated: sender={user_id_str}, receiver={receiver_id}, content={data['content'][:50]}")
 
-        # Verify receiver exists
+        # Verify receiver exists - could be user_id or farmer_id
         receiver = User.query.filter_by(id=receiver_id).first()
         if not receiver:
-            return jsonify({"error": "Receiver not found"}), 404
+            # Try as farmer_id
+            farmer = Farmer.query.filter_by(id=receiver_id).first()
+            if farmer:
+                receiver_id = farmer.user_id
+                receiver = farmer.user
+                print(f"🔄 Converted farmer_id to user_id: {receiver_id}")
+            else:
+                print(f"❌ Receiver not found: {receiver_id}")
+                return jsonify({"error": "Receiver not found"}), 404
 
         # Create message
+        print(f"💾 Creating message in database...")
         message = Message(
             sender_id=user_id_str,
             receiver_id=receiver_id,
@@ -100,13 +115,27 @@ def livestock_conversation(livestock_id):
 
         db.session.add(message)
 
+        # Create notification for receiver
+        notification = Notification(
+            user_id=receiver_id,
+            type="new_negotiation",
+            title="New Message",
+            message=f"{user.full_name} sent you a message about {animal.species}",
+            related_id=livestock_id,  # Store livestock_id for navigation
+            is_read=False
+        )
+        db.session.add(notification)
+
         try:
             db.session.commit()
+            print(f"✅ Message saved successfully: {message.id}")
+            print(f"🔔 Notification created for user: {receiver_id}")
             return jsonify({
                 "message": "Message sent successfully",
                 "data": message.to_dict(),
             }), 201
         except Exception as e:
+            print(f"❌ Database error: {e}")
             db.session.rollback()
             return jsonify({"error": str(e)}), 500
 
