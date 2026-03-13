@@ -136,6 +136,24 @@ def create_app(config_name="default"):
                 except Exception as e:
                     print(f"⚠️ Column migration notice: {e}")
                     connection.execute(text("COMMIT"))
+                
+                # --- Fix Missing quantity Column in animals table ---
+                try:
+                    connection.execute(text("""
+                        DO $$ 
+                        BEGIN 
+                            IF NOT EXISTS (SELECT 1 FROM information_schema.columns 
+                                           WHERE table_name='animals' AND column_name='quantity') THEN
+                                ALTER TABLE animals ADD COLUMN quantity INTEGER DEFAULT 1;
+                                UPDATE animals SET quantity = 1 WHERE quantity IS NULL;
+                            END IF;
+                        END $$;
+                    """))
+                    connection.execute(text("COMMIT"))
+                    print("✅ Production: quantity column verified.")
+                except Exception as e:
+                    print(f"⚠️ Quantity column migration notice: {e}")
+                    connection.execute(text("COMMIT"))
 
                 connection.close()
 

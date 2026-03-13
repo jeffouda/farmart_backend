@@ -105,22 +105,34 @@ class Animal(db.Model, TimestampMixin):
     quantity = db.Column(db.Integer, default=1)
 
     def to_dict(self):
-        return {
-            "id": str(self.id),
-            "species": self.species,
-            "breed": self.breed,
-            "age": self.age,
-            "weight": self.weight,
-            "price": float(self.price),
-            "status": self.status,
-            "gender": self.gender,
-            "health_history": self.health_history,
-            "image_url": self.image_url,
-            "quantity": self.quantity or 1,
-            "farmer_name": self.owner.farm_name if self.owner else None,
-            "farmer_id": str(self.owner.id) if self.owner else None,
-            "location": self.owner.location if self.owner else None,
-        }
+        try:
+            return {
+                "id": str(self.id),
+                "species": self.species,
+                "breed": self.breed,
+                "age": self.age,
+                "weight": self.weight,
+                "price": float(self.price),
+                "status": self.status,
+                "gender": self.gender,
+                "health_history": self.health_history,
+                "image_url": self.image_url,
+                "quantity": getattr(self, 'quantity', 1) or 1,
+                "farmer_name": self.owner.farm_name if self.owner else None,
+                "farmer_id": str(self.owner.id) if self.owner else None,
+                "location": self.owner.location if self.owner else None,
+            }
+        except Exception as e:
+            print(f"❌ Error in Animal.to_dict(): {e}")
+            # Return minimal dict to prevent complete failure
+            return {
+                "id": str(self.id),
+                "species": self.species,
+                "breed": self.breed,
+                "price": float(self.price),
+                "status": self.status,
+                "quantity": 1,
+            }
 
 
 class Order(db.Model, TimestampMixin):
