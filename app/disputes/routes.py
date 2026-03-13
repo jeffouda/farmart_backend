@@ -206,57 +206,69 @@ def get_my_disputes():
     """Get disputes for the current authenticated user"""
     try:
         current_user_id_str = get_jwt_identity()
-        user_uuid = get_uuid(current_user_id_str)
-        if not user_uuid:
-            return jsonify({"error": "Invalid user ID format"}), 400
 
         # Get user's farmer/buyer profile
-        farmer = Farmer.query.filter_by(user_id=user_uuid).first()
-        buyer = Buyer.query.filter_by(user_id=user_uuid).first()
+        farmer = Farmer.query.filter_by(user_id=current_user_id_str).first()
+        buyer = Buyer.query.filter_by(user_id=current_user_id_str).first()
         
         # Get disputes where user is filer or target
         incoming = []
         outgoing = []
         
         # Outgoing: disputes filed by user
-        outgoing_disputes = Dispute.query.filter_by(filer_id=user_uuid).all()
+        outgoing_disputes = Dispute.query.filter_by(filer_id=current_user_id_str).all()
         for d in outgoing_disputes:
             dispute_dict = d.to_dict()
             # Get filer info
-            filer = User.query.get(d.filer_id)
+            filer = User.query.filter_by(id=d.filer_id).first()
             dispute_dict["filer_name"] = filer.full_name if filer else "Unknown"
             # Get order details
             if d.order_id:
-                order = Order.query.get(d.order_id)
+                order = Order.query.filter_by(id=d.order_id).first()
                 if order:
                     dispute_dict["order_amount"] = float(order.total_amount)
                     dispute_dict["item_details"] = order.items[0].get("name") if order.items else "Unknown"
             outgoing.append(dispute_dict)
         
-        # Incoming: disputes against user's orders
-        if farmer:
-            farmer_orders = Order.query.filter_by(farmer_id=farmer.id).all()
-            order_ids = [o.id for o in farmer_orders]
-            incoming_disputes = Dispute.query.filter(Dispute.order_id.in_(order_ids)).all()
-            for d in incoming_disputes:
+        # Incoming: disputes where user is target OR disputes against user's orders
+        # Method 1: Direct target
+        incoming_disputes = Dispute.query.filter_by(target_id=current_user_id_str).all()
+        for d in incoming_disputes:
+            if d.filer_id != current_user_id_str:  # Don't duplicate
                 dispute_dict = d.to_dict()
-                filer = User.query.get(d.filer_id)
+                filer = User.query.filter_by(id=d.filer_id).first()
                 dispute_dict["filer_name"] = filer.full_name if filer else "Unknown"
-                order = Order.query.get(d.order_id)
+                order = Order.query.filter_by(id=d.order_id).first() if d.order_id else None
                 if order:
                     dispute_dict["order_amount"] = float(order.total_amount)
                     dispute_dict["item_details"] = order.items[0].get("name") if order.items else "Unknown"
                 incoming.append(dispute_dict)
         
+        # Method 2: Check by order ownership (for backward compatibility)
+        if farmer:
+            farmer_orders = Order.query.filter_by(farmer_id=farmer.id).all()
+            order_ids = [o.id for o in farmer_orders]
+            order_disputes = Dispute.query.filter(Dispute.order_id.in_(order_ids)).all()
+            for d in order_disputes:
+                if d.filer_id != current_user_id_str and d not in incoming_disputes:
+                    dispute_dict = d.to_dict()
+                    filer = User.query.filter_by(id=d.filer_id).first()
+                    dispute_dict["filer_name"] = filer.full_name if filer else "Unknown"
+                    order = Order.query.filter_by(id=d.order_id).first()
+                    if order:
+                        dispute_dict["order_amount"] = float(order.total_amount)
+                        dispute_dict["item_details"] = order.items[0].get("name") if order.items else "Unknown"
+                    incoming.append(dispute_dict)
+        
         if buyer:
             buyer_orders = Order.query.filter_by(buyer_id=buyer.id).all()
             order_ids = [o.id for o in buyer_orders]
             for d in Dispute.query.filter(Dispute.order_id.in_(order_ids)).all():
-                if d.filer_id != user_uuid:  # Don't duplicate
+                if d.filer_id != current_user_id_str and d not in incoming_disputes:  # Don't duplicate
                     dispute_dict = d.to_dict()
-                    filer = User.query.get(d.filer_id)
+                    filer = User.query.filter_by(id=d.filer_id).first()
                     dispute_dict["filer_name"] = filer.full_name if filer else "Unknown"
-                    order = Order.query.get(d.order_id)
+                    order = Order.query.filter_by(id=d.order_id).first()
                     if order:
                         dispute_dict["order_amount"] = float(order.total_amount)
                         dispute_dict["item_details"] = order.items[0].get("name") if order.items else "Unknown"
@@ -349,26 +361,19 @@ def respond_to_dispute(dispute_id):
     """Respond to a dispute (for both farmers and buyers who are targets)"""
     try:
         current_user_id_str = get_jwt_identity()
-        user_uuid = get_uuid(current_user_id_str)
-        if not user_uuid:
-            return jsonify({"error": "Invalid user ID format"}), 400
         
-        dispute_uuid = get_uuid(dispute_id)
-        if not dispute_uuid:
-            return jsonify({"error": "Invalid dispute ID format"}), 400
-        
-        dispute = Dispute.query.get(dispute_uuid)
+        dispute = Dispute.query.filter_by(id=dispute_id).first()
         if not dispute:
             return jsonify({"error": "Dispute not found"}), 404
         
         # Verify the current user is the target of the dispute
-        if dispute.target_id != user_uuid:
+        if dispute.target_id != current_user_id_str:
             return jsonify({"error": "You are not authorized to respond to this dispute"}), 403
         
         # Determine if current user is farmer or buyer
-        user = User.query.filter_by(id=str(user_uuid)).first()
-        is_farmer = Farmer.query.filter_by(user_id=user_uuid).first() is not None
-        is_buyer = Buyer.query.filter_by(user_id=user_uuid).first() is not None
+        user = User.query.filter_by(id=current_user_id_str).first()
+        is_farmer = Farmer.query.filter_by(user_id=current_user_id_str).first() is not None
+        is_buyer = Buyer.query.filter_by(user_id=current_user_id_str).first() is not None
         
         # Get response data
         data = request.form.to_dict()
@@ -401,6 +406,19 @@ def respond_to_dispute(dispute_id):
                 dispute.farmer_evidence = filepath
         
         db.session.commit()
+        
+        # Notify the filer (original complainant) that target has responded
+        try:
+            create_notification(
+                user_id=dispute.filer_id,
+                type='dispute_update',
+                title='Dispute Response Received',
+                message=f'The other party has responded to your dispute (Ticket: {dispute.ticket_id})',
+                related_id=str(dispute.id),
+                related_type='dispute'
+            )
+        except Exception as notify_error:
+            current_app.logger.error(f"Error creating notification: {notify_error}")
         
         return jsonify({
             "message": "Response submitted successfully",
