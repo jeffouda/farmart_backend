@@ -52,12 +52,9 @@ def create_dispute():
     """Create a new dispute"""
     try:
         current_user_id_str = get_jwt_identity()
-        user_uuid = get_uuid(current_user_id_str)
-        if not user_uuid:
-            return jsonify({"error": "Invalid user ID format"}), 400
         
         # Get user
-        user = User.query.filter_by(id=str(user_uuid)).first()
+        user = User.query.filter_by(id=current_user_id_str).first()
         if not user:
             return jsonify({"error": "User not found"}), 404
         
@@ -72,34 +69,32 @@ def create_dispute():
         
         # Get order if provided
         order_id_str = data.get("order_id")
-        order_id = get_uuid(order_id_str) if order_id_str else None
         
         # Get target ID (user being reported)
         target_id_str = data.get("target_id")
-        target_id = get_uuid(target_id_str) if target_id_str else None
         
         # If order is provided, auto-detect target from order
-        if order_id and not target_id:
-            order = Order.query.get(order_id)
+        if order_id_str and not target_id_str:
+            order = Order.query.filter_by(id=order_id_str).first()
             if order:
                 if user_role == "farmer":
                     # Farmer filing dispute → target is buyer
                     buyer = Buyer.query.get(order.buyer_id)
                     if buyer:
-                        target_id = buyer.user_id
-                        current_app.logger.info(f"Auto-detected buyer target_id: {target_id} for farmer dispute on order {order_id}")
+                        target_id_str = buyer.user_id
+                        current_app.logger.info(f"Auto-detected buyer target_id: {target_id_str} for farmer dispute on order {order_id_str}")
                 elif user_role == "buyer":
                     # Buyer filing dispute → target is farmer
                     farmer = Farmer.query.get(order.farmer_id)
                     if farmer:
-                        target_id = farmer.user_id
-                        current_app.logger.info(f"Auto-detected farmer target_id: {target_id} for buyer dispute on order {order_id}")
+                        target_id_str = farmer.user_id
+                        current_app.logger.info(f"Auto-detected farmer target_id: {target_id_str} for buyer dispute on order {order_id_str}")
         
         dispute = Dispute(
             ticket_id=ticket_id,
-            order_id=order_id,
-            filer_id=user_uuid,
-            target_id=target_id,
+            order_id=order_id_str,
+            filer_id=current_user_id_str,
+            target_id=target_id_str,
             dispute_type=data.get("dispute_type", "order"),
             reason=data.get("reason"),
             description=data.get("description"),
@@ -113,9 +108,9 @@ def create_dispute():
         # Create notifications
         try:
             # Notify target of the dispute
-            if target_id:
+            if target_id_str:
                 create_notification(
-                    user_id=target_id,
+                    user_id=target_id_str,
                     type='new_dispute',
                     title='New Dispute Filed',
                     message=f'A new dispute has been filed. Reason: {data.get("reason", "General")}',
@@ -124,7 +119,7 @@ def create_dispute():
                 )
             # Notify filer (confirmation)
             create_notification(
-                user_id=user_uuid,
+                user_id=current_user_id_str,
                 type='dispute_filed',
                 title='Dispute Filed Successfully',
                 message=f'Your dispute has been submitted. Ticket ID: {ticket_id}',
@@ -138,7 +133,7 @@ def create_dispute():
             "message": "Dispute created successfully",
             "ticket_id": ticket_id,
             "dispute_id": str(dispute.id),
-            "target_id": str(target_id) if target_id else None,
+            "target_id": str(target_id_str) if target_id_str else None,
         }), 201
         
     except Exception as e:
