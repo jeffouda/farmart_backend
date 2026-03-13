@@ -43,19 +43,43 @@ def livestock_conversation(livestock_id):
         return jsonify({"error": "Livestock not found"}), 404
 
     if request.method == "GET":
-        # Get messages where user is sender or receiver
-        messages = (
-            Message.query
-            .filter(
-                Message.livestock_id == livestock_id,
-                (
-                    (Message.sender_id == user_id_str)
-                    | (Message.receiver_id == user_id_str)
-                ),
+        # Get optional partner_id from query params to filter specific conversation
+        partner_id = request.args.get('partner_id')
+        
+        if partner_id:
+            # Filter messages for specific conversation between user and partner
+            messages = (
+                Message.query
+                .filter(
+                    Message.livestock_id == livestock_id,
+                    db.or_(
+                        db.and_(
+                            Message.sender_id == user_id_str,
+                            Message.receiver_id == partner_id
+                        ),
+                        db.and_(
+                            Message.sender_id == partner_id,
+                            Message.receiver_id == user_id_str
+                        )
+                    )
+                )
+                .order_by(Message.created_at.asc())
+                .all()
             )
-            .order_by(Message.created_at.asc())
-            .all()
-        )
+        else:
+            # Get ALL messages where user is sender or receiver (old behavior)
+            messages = (
+                Message.query
+                .filter(
+                    Message.livestock_id == livestock_id,
+                    (
+                        (Message.sender_id == user_id_str)
+                        | (Message.receiver_id == user_id_str)
+                    ),
+                )
+                .order_by(Message.created_at.asc())
+                .all()
+            )
 
         # Get farmer info for the livestock
         farmer = Farmer.query.get(animal.farmer_id)
@@ -121,7 +145,7 @@ def livestock_conversation(livestock_id):
             type="new_negotiation",
             title="New Message",
             message=f"{user.full_name} sent you a message about {animal.species}",
-            related_id=livestock_id,  # Store livestock_id for navigation
+            related_id=f"{livestock_id}:{user_id_str}",  # Store livestock_id:sender_id for navigation
             is_read=False
         )
         db.session.add(notification)
@@ -179,49 +203,82 @@ def get_conversations():
 
     conversations = []
     for livestock_id in livestock_ids:
-        # Get the latest message for this livestock
-        latest_message = (
-            Message.query
-            .filter(Message.livestock_id == livestock_id)
-            .order_by(Message.created_at.desc())
-            .first()
-        )
-
-        if latest_message:
-            animal = Animal.query.filter_by(id=livestock_id).first()
-            farmer = Farmer.query.get(animal.farmer_id) if animal else None
-
-            # Determine the other party
-            if latest_message.sender_id == user_id_str:
-                other_user = latest_message.receiver
-                other_name = other_user.full_name if other_user else "Unknown"
-            else:
-                other_user = latest_message.sender
-                other_name = other_user.full_name if other_user else "Unknown"
-
-            # Count unread messages
-            unread_count = Message.query.filter(
+        # Get all unique conversation partners for this livestock
+        # A farmer might have multiple buyers messaging about the same animal
+        partners_query = (
+            db.session.query(Message.sender_id, Message.receiver_id)
+            .filter(
                 Message.livestock_id == livestock_id,
-                Message.receiver_id == user_id_str,
-                Message.is_read == False,
-            ).count()
+                db.or_(
+                    Message.sender_id == user_id_str,
+                    Message.receiver_id == user_id_str
+                )
+            )
+            .all()
+        )
+        
+        # Extract unique partner IDs
+        partner_ids = set()
+        for sender_id, receiver_id in partners_query:
+            if sender_id != user_id_str:
+                partner_ids.add(sender_id)
+            if receiver_id != user_id_str:
+                partner_ids.add(receiver_id)
+        
+        # Create a conversation entry for each unique partner
+        for partner_id in partner_ids:
+            # Get the latest message between user and this specific partner
+            latest_message = (
+                Message.query
+                .filter(
+                    Message.livestock_id == livestock_id,
+                    db.or_(
+                        db.and_(
+                            Message.sender_id == user_id_str,
+                            Message.receiver_id == partner_id
+                        ),
+                        db.and_(
+                            Message.sender_id == partner_id,
+                            Message.receiver_id == user_id_str
+                        )
+                    )
+                )
+                .order_by(Message.created_at.desc())
+                .first()
+            )
 
-            conversations.append({
-                "livestock_id": str(livestock_id),
-                "livestock": {
-                    "species": animal.species if animal else None,
-                    "breed": animal.breed if animal else None,
-                    "image_url": animal.image_url if animal else None,
-                },
-                "other_party": other_name,
-                "last_message": latest_message.content[:100] + "..."
-                if len(latest_message.content) > 100
-                else latest_message.content,
-                "last_message_at": latest_message.created_at.isoformat()
-                if latest_message.created_at
-                else None,
-                "unread_count": unread_count,
-            })
+            if latest_message:
+                animal = Animal.query.filter_by(id=livestock_id).first()
+                
+                # Get partner info
+                partner_user = User.query.filter_by(id=partner_id).first()
+                partner_name = partner_user.full_name if partner_user else "Unknown"
+
+                # Count unread messages from this specific partner
+                unread_count = Message.query.filter(
+                    Message.livestock_id == livestock_id,
+                    Message.sender_id == partner_id,
+                    Message.receiver_id == user_id_str,
+                    Message.is_read == False,
+                ).count()
+
+                conversations.append({
+                    "livestock_id": str(livestock_id),
+                    "partner_id": str(partner_id),  # Add partner_id for filtering
+                    "livestock": {
+                        "species": animal.species if animal else None,
+                        "breed": animal.breed if animal else None,
+                        "image_url": animal.image_url if animal else None,
+                    },
+                    "other_party": partner_name,
+                    "last_message": latest_message.content[:100] + "..."
+                    if len(latest_message.content) > 100
+                    else latest_message.content,
+                    "last_message_at": latest_message.created_at.isoformat()
+                    if latest_message.created_at
+                    else None,
+                    "unread_count": unread_count,
+                })
 
     # Sort by latest message
     conversations.sort(key=lambda x: x.get("last_message_at", ""), reverse=True)
