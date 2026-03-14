@@ -154,6 +154,26 @@ def create_app(config_name="default"):
                 except Exception as e:
                     print(f"⚠️ Quantity column migration notice: {e}")
                     connection.execute(text("COMMIT"))
+                
+                # --- Fix notifications table for messaging ---
+                try:
+                    # Increase related_id column size to handle livestock_id:sender_id format
+                    connection.execute(text("""
+                        DO $$ 
+                        BEGIN 
+                            -- Check if related_id column exists and alter if needed
+                            IF EXISTS (SELECT 1 FROM information_schema.columns 
+                                       WHERE table_name='notifications' AND column_name='related_id') THEN
+                                -- Alter column to allow longer strings (for livestock_id:sender_id format)
+                                ALTER TABLE notifications ALTER COLUMN related_id TYPE VARCHAR(100);
+                            END IF;
+                        END $$;
+                    """))
+                    connection.execute(text("COMMIT"))
+                    print("✅ Production: notifications.related_id column size increased.")
+                except Exception as e:
+                    print(f"⚠️ Notifications column migration notice: {e}")
+                    connection.execute(text("COMMIT"))
 
                 connection.close()
 
