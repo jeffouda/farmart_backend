@@ -139,29 +139,36 @@ def livestock_conversation(livestock_id):
 
         db.session.add(message)
 
-        # Create notification for receiver
-        notification = Notification(
-            user_id=receiver_id,
-            type="new_negotiation",
-            title="New Message",
-            message=f"{user.full_name} sent you a message about {animal.species}",
-            related_id=f"{livestock_id}:{user_id_str}",  # Store livestock_id:sender_id for navigation
-            is_read=False
-        )
-        db.session.add(notification)
+        # Create notification for receiver with error handling
+        try:
+            notification = Notification(
+                user_id=receiver_id,
+                type="new_negotiation",
+                title="New Message",
+                message=f"{user.full_name} sent you a message about {animal.species}",
+                related_id=f"{livestock_id}:{user_id_str}",  # Store livestock_id:sender_id for navigation
+                related_type="negotiation",  # Add related_type
+                is_read=False
+            )
+            db.session.add(notification)
+            print(f"🔔 Notification created for user: {receiver_id}")
+        except Exception as notif_error:
+            print(f"⚠️ Failed to create notification: {notif_error}")
+            # Continue without notification - message is more important
 
         try:
             db.session.commit()
             print(f"✅ Message saved successfully: {message.id}")
-            print(f"🔔 Notification created for user: {receiver_id}")
             return jsonify({
                 "message": "Message sent successfully",
                 "data": message.to_dict(),
             }), 201
         except Exception as e:
             print(f"❌ Database error: {e}")
+            import traceback
+            traceback.print_exc()
             db.session.rollback()
-            return jsonify({"error": str(e)}), 500
+            return jsonify({"error": f"Database error: {str(e)}"}), 500
 
 
 # Get all conversations for current user
