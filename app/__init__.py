@@ -182,19 +182,17 @@ def create_app(config_name="default"):
             print(f"❌ Database initialization error: {e}")
 
     # --- UNIFIED CORS CONFIGURATION ---
+    allowed_origins = os.environ.get(
+        "ALLOWED_ORIGINS",
+        "http://localhost:5173,http://127.0.0.1:5173,http://localhost:3000,https://farmart-com.onrender.com"
+    ).split(",")
+
     CORS(
         app,
         supports_credentials=True,
         resources={
             r"/api/*": {
-                "origins": [
-                    "http://localhost:5173",
-                    "http://127.0.0.1:5173",
-                    "http://localhost:3000",
-                    "https://farmart-com.onrender.com",
-                    "https://farmart-backend-q9w6.onrender.com",
-                    "https://aglisten-armida-confarreate.ngrok-free.dev",
-                ],
+                "origins": allowed_origins,
                 "methods": ["GET", "POST", "PUT", "DELETE", "OPTIONS", "PATCH"],
                 "allow_headers": [
                     "Content-Type",
@@ -209,6 +207,22 @@ def create_app(config_name="default"):
             }
         },
     )
+
+    # Explicit OPTIONS preflight handler — guarantees CORS headers even if
+    # flask-cors misses a route during cold starts on Render
+    @app.before_request
+    def handle_preflight():
+        if request.method == "OPTIONS":
+            from flask import make_response
+            origin = request.headers.get("Origin", "")
+            if origin in allowed_origins:
+                res = make_response()
+                res.headers["Access-Control-Allow-Origin"] = origin
+                res.headers["Access-Control-Allow-Credentials"] = "true"
+                res.headers["Access-Control-Allow-Methods"] = "GET,POST,PUT,DELETE,OPTIONS,PATCH"
+                res.headers["Access-Control-Allow-Headers"] = "Content-Type,Authorization,Accept,Origin,X-Requested-With,ngrok-skip-browser-warning"
+                res.headers["Access-Control-Max-Age"] = "86400"
+                return res, 204
 
     # Register blueprints
     from app.auth import auth_bp
